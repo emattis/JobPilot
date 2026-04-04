@@ -1,0 +1,192 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model UserProfile {
+  id              String   @id @default(cuid())
+  name            String
+  email           String
+  phone           String?
+  location        String?
+  linkedinUrl     String?
+  portfolioUrl    String?
+  githubUrl       String?
+  summary         String?  @db.Text
+  skills          String[]
+  yearsExperience Int?
+  targetRoles     String[]
+  targetCompanies String[]
+  minSalary       Int?
+  maxSalary       Int?
+  preferRemote    Boolean  @default(true)
+  industries      String[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  resumes      Resume[]
+  experiences  Experience[]
+  education    Education[]
+  applications Application[]
+}
+
+model Resume {
+  id        String      @id @default(cuid())
+  userId    String
+  user      UserProfile @relation(fields: [userId], references: [id])
+  name      String
+  rawText   String      @db.Text
+  fileUrl   String?
+  isDefault Boolean     @default(false)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  applications Application[]
+}
+
+model Experience {
+  id          String      @id @default(cuid())
+  userId      String
+  user        UserProfile @relation(fields: [userId], references: [id])
+  company     String
+  title       String
+  startDate   DateTime
+  endDate     DateTime?
+  current     Boolean     @default(false)
+  description String?     @db.Text
+  skills      String[]
+}
+
+model Education {
+  id          String      @id @default(cuid())
+  userId      String
+  user        UserProfile @relation(fields: [userId], references: [id])
+  institution String
+  degree      String
+  field       String?
+  startDate   DateTime?
+  endDate     DateTime?
+  gpa         Float?
+}
+
+model JobPosting {
+  id              String    @id @default(cuid())
+  url             String    @unique
+  title           String
+  company         String
+  companyUrl      String?
+  location        String?
+  remote          Boolean?
+  salaryMin       Int?
+  salaryMax       Int?
+  description     String    @db.Text
+  requirements    String?   @db.Text
+  niceToHaves     String?   @db.Text
+  skills          String[]
+  experienceLevel String?
+  source          String
+  postedAt        DateTime?
+  scrapedAt       DateTime  @default(now())
+  expiresAt       DateTime?
+
+  analyses     JobAnalysis[]
+  applications Application[]
+}
+
+model JobAnalysis {
+  id      String     @id @default(cuid())
+  jobId   String
+  job     JobPosting @relation(fields: [jobId], references: [id])
+  resumeId String?
+
+  overallFitScore      Int
+  skillMatchScore      Int
+  experienceMatchScore Int
+  cultureFitScore      Int
+  growthPotentialScore Int
+
+  shouldApply      Boolean
+  confidenceLevel  String
+  reasoning        String   @db.Text
+
+  matchingSkills     String[]
+  missingSkills      String[]
+  transferableSkills String[]
+  resumeImprovements String   @db.Text
+  coverLetterTips    String?  @db.Text
+  interviewPrepTopics String[]
+
+  companyAnalysis String? @db.Text
+
+  createdAt DateTime @default(now())
+}
+
+model Application {
+  id       String      @id @default(cuid())
+  userId   String
+  user     UserProfile @relation(fields: [userId], references: [id])
+  jobId    String
+  job      JobPosting  @relation(fields: [jobId], references: [id])
+  resumeId String?
+  resume   Resume?     @relation(fields: [resumeId], references: [id])
+
+  status       ApplicationStatus @default(BOOKMARKED)
+  appliedAt    DateTime?
+  responseAt   DateTime?
+  interviewAt  DateTime?
+  notes        String?   @db.Text
+  followUpDate DateTime?
+
+  rejectedAt  DateTime?
+  offeredAt   DateTime?
+  offerAmount Int?
+  accepted    Boolean?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  statusHistory StatusChange[]
+}
+
+model StatusChange {
+  id            String            @id @default(cuid())
+  applicationId String
+  application   Application       @relation(fields: [applicationId], references: [id])
+  fromStatus    ApplicationStatus
+  toStatus      ApplicationStatus
+  changedAt     DateTime          @default(now())
+  note          String?
+}
+
+enum ApplicationStatus {
+  BOOKMARKED
+  ANALYZING
+  READY_TO_APPLY
+  APPLIED
+  SCREENING
+  PHONE_INTERVIEW
+  TECHNICAL_INTERVIEW
+  ONSITE_INTERVIEW
+  FINAL_ROUND
+  OFFER
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+  GHOSTED
+}
+
+model DiscoveredJob {
+  id             String   @id @default(cuid())
+  url            String   @unique
+  title          String
+  company        String
+  source         String
+  relevanceScore Int?
+  reasoning      String?  @db.Text
+  dismissed      Boolean  @default(false)
+  savedAt        DateTime @default(now())
+}
