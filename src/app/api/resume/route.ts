@@ -46,10 +46,13 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Parse PDF text (require for CJS compatibility with serverExternalPackages)
+    // pdf-parse v2 class-based API
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text: string; numpages: number }>;
-    const parsed = await pdfParse(buffer);
+    const { PDFParse } = require("pdf-parse") as {
+      PDFParse: new (opts: { data: Buffer }) => { getText(): Promise<{ text: string }> };
+    };
+    const parser = new PDFParse({ data: buffer });
+    const parsed = await parser.getText();
     const rawText = parsed.text.trim();
 
     if (!rawText) {

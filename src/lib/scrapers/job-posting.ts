@@ -1,0 +1,348 @@
+import * as cheerio from "cheerio";
+import type { ScrapedJob } from "@/types/analysis";
+
+const USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
+
+const FETCH_TIMEOUT_MS = 12000;
+
+// Common tech skills to auto-detect in job descriptions
+const SKILL_PATTERNS = [
+  "TypeScript", "JavaScript", "Python", "Go", "Rust", "Java", "C\\+\\+", "C#",
+  "Ruby", "PHP", "Swift", "Kotlin", "Scala", "Elixir", "Haskell",
+  "React", "Next\\.js", "Vue", "Angular", "Svelte", "React Native",
+  "Node\\.js", "Express", "FastAPI", "Django", "Rails", "Spring",
+  "PostgreSQL", "MySQL", "SQLite", "MongoDB", "Redis", "Elasticsearch",
+  "AWS", "GCP", "Azure", "Docker", "Kubernetes", "Terraform", "Pulumi",
+  "GraphQL", "REST", "gRPC", "WebSockets", "tRPC",
+  "Git", "CI/CD", "GitHub Actions", "Jenkins",
+  "Linux", "Bash", "Shell",
+  "Machine Learning", "Deep Learning", "LLMs", "PyTorch", "TensorFlow",
+  "Figma", "Sketch", "Product Management", "Agile", "Scrum",
+];
+
+function extractSkills(text: string): string[] {
+  return SKILL_PATTERNS.filter((skill) =>
+    new RegExp(`\\b${skill}\\b`, "i").test(text)
+  );
+}
+
+function extractSalary(text: string): { min: number | null; max: number | null } {
+  // Match patterns like $120k, $120,000, $120K-$160K
+  const range = text.match(
+    /\$(\d{1,3}(?:,\d{3})?(?:\.\d+)?)\s*[kK]?\s*[-–to]+\s*\$(\d{1,3}(?:,\d{3})?(?:\.\d+)?)\s*[kK]?/
+  );
+  if (range) {
+    const parse = (s: string, hasK: boolean) => {
+      const n = parseFloat(s.replace(/,/g, ""));
+      return hasK || n < 1000 ? Math.round(n * 1000) : Math.round(n);
+    };
+    const hasK = /[kK]/.test(range[0]);
+    return { min: parse(range[1], hasK), max: parse(range[2], hasK) };
+  }
+  return { min: null, max: null };
+}
+
+function detectRemote(text: string): boolean | null {
+  const lower = text.toLowerCase();
+  if (/\bremote\b/.test(lower)) return true;
+  if (/\bon-?site\b|\bin-?office\b|\bin person\b/.test(lower)) return false;
+  return null;
+}
+
+function detectExperienceLevel(text: string): string | null {
+  const lower = text.toLowerCase();
+  if (/\b(staff|principal|distinguished)\b/.test(lower)) return "staff";
+  if (/\b(lead|tech lead|engineering lead)\b/.test(lower)) return "lead";
+  if (/\b(senior|sr\.)\b/.test(lower)) return "senior";
+  if (/\b(mid-?level|mid level|intermediate)\b/.test(lower)) return "mid";
+  if (/\b(junior|jr\.?|entry.?level|associate)\b/.test(lower)) return "junior";
+  return null;
+}
+
+function htmlToText(html: string): string {
+  const $ = cheerio.load(html);
+  $("script, style").remove();
+  return $.text().replace(/\s+/g, " ").trim();
+}
+
+// ── Greenhouse ────────────────────────────────────────────────────────────────
+async function scrapeGreenhouse(url: string): Promise<ScrapedJob> {
+  const res = await fetch(url, {
+    headers: { "User-Agent": USER_AGENT },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  const html = await res.text();
+  const $ = cheerio.load(html);
+
+  const title =
+    $("h1.app-title").text().trim() ||
+    $('h1[class*="title"]').first().text().trim() ||
+    $("h1").first().text().trim();
+
+  const company =
+    $(".company-name").text().trim() ||
+    $('[class*="company"]').first().text().trim() ||
+    new URL(url).pathname.split("/")[1];
+
+  const location = $(".location").text().trim() || null;
+
+  const descHtml =
+    $("#content").html() ||
+    $(".section--body").html() ||
+    $('[class*="description"]').first().html() ||
+    "";
+
+  const description = htmlToText(descHtml);
+  const salary = extractSalary(description);
+
+  return {
+    title,
+    company,
+    location,
+    description,
+    requirements: null,
+    niceToHaves: null,
+    skills: extractSkills(description),
+    experienceLevel: detectExperienceLevel(title + " " + description),
+    salaryMin: salary.min,
+    salaryMax: salary.max,
+    remote: detectRemote(location + " " + description),
+    postedAt: null,
+    source: "greenhouse",
+  };
+}
+
+// ── Lever ─────────────────────────────────────────────────────────────────────
+async function scrapeLever(url: string): Promise<ScrapedJob> {
+  // Try the JSON API first
+  const apiUrl = url.replace(/\?.*$/, "") + "?format=json";
+  const res = await fetch(apiUrl, {
+    headers: { "User-Agent": USER_AGENT },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+
+  if (res.ok) {
+    const data = await res.json() as {
+      text?: string;
+      categories?: { location?: string; team?: string };
+      content?: string;
+      lists?: Array<{ text: string; content: string }>;
+      additional?: string;
+    };
+
+    const description = htmlToText(
+      [data.content ?? "", ...(data.lists ?? []).map((l) => l.content), data.additional ?? ""].join("\n")
+    );
+
+    const requirementsList = data.lists?.find((l) =>
+      /requirement|qualification/i.test(l.text)
+    );
+    const niceToHavesList = data.lists?.find((l) =>
+      /nice.to.have|bonus|preferred/i.test(l.text)
+    );
+
+    const salary = extractSalary(description);
+    const company = url.split("/")[3] ?? "";
+
+    return {
+      title: data.text ?? "",
+      company,
+      location: data.categories?.location ?? null,
+      description,
+      requirements: requirementsList ? htmlToText(requirementsList.content) : null,
+      niceToHaves: niceToHavesList ? htmlToText(niceToHavesList.content) : null,
+      skills: extractSkills(description),
+      experienceLevel: detectExperienceLevel((data.text ?? "") + " " + description),
+      salaryMin: salary.min,
+      salaryMax: salary.max,
+      remote: detectRemote((data.categories?.location ?? "") + " " + description),
+      postedAt: null,
+      source: "lever",
+    };
+  }
+
+  // Fall back to HTML scraping
+  return scrapeGeneric(url, "lever");
+}
+
+// ── Ashby ─────────────────────────────────────────────────────────────────────
+async function scrapeAshby(url: string): Promise<ScrapedJob> {
+  const res = await fetch(url, {
+    headers: { "User-Agent": USER_AGENT },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  const html = await res.text();
+  const $ = cheerio.load(html);
+
+  const title = $("h1").first().text().trim();
+  const location =
+    $('[class*="location"]').first().text().trim() ||
+    $('[data-testid*="location"]').text().trim() ||
+    null;
+
+  const descHtml =
+    $('[class*="job-posting"]').html() ||
+    $('[class*="description"]').first().html() ||
+    $("main").html() ||
+    "";
+
+  const description = htmlToText(descHtml);
+  const company = url.includes("ashbyhq.com")
+    ? url.split("/")[3]
+    : new URL(url).hostname.split(".")[0];
+
+  const salary = extractSalary(description);
+
+  return {
+    title,
+    company,
+    location,
+    description,
+    requirements: null,
+    niceToHaves: null,
+    skills: extractSkills(description),
+    experienceLevel: detectExperienceLevel(title + " " + description),
+    salaryMin: salary.min,
+    salaryMax: salary.max,
+    remote: detectRemote((location ?? "") + " " + description),
+    postedAt: null,
+    source: "ashby",
+  };
+}
+
+// ── Generic / Fallback ────────────────────────────────────────────────────────
+async function scrapeGeneric(url: string, source = "manual"): Promise<ScrapedJob> {
+  const res = await fetch(url, {
+    headers: { "User-Agent": USER_AGENT },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  const html = await res.text();
+  const $ = cheerio.load(html);
+
+  // Try JSON-LD structured data first
+  const jsonLdScript = $('script[type="application/ld+json"]')
+    .toArray()
+    .map((el) => {
+      try {
+        return JSON.parse($(el).html() ?? "");
+      } catch {
+        return null;
+      }
+    })
+    .find((d) => d?.["@type"] === "JobPosting");
+
+  if (jsonLdScript) {
+    const d = jsonLdScript;
+    const description = htmlToText(d.description ?? "");
+    const salary = extractSalary(description);
+    const minVal = d.baseSalary?.value?.minValue ?? d.baseSalary?.value ?? null;
+    const maxVal = d.baseSalary?.value?.maxValue ?? null;
+
+    return {
+      title: d.title ?? "",
+      company: d.hiringOrganization?.name ?? "",
+      location: d.jobLocation?.address?.addressLocality ?? null,
+      description,
+      requirements: null,
+      niceToHaves: null,
+      skills: extractSkills(description),
+      experienceLevel: detectExperienceLevel(d.title + " " + description),
+      salaryMin: minVal ? Math.round(Number(minVal)) : salary.min,
+      salaryMax: maxVal ? Math.round(Number(maxVal)) : salary.max,
+      remote: d.jobLocationType === "TELECOMMUTE" || detectRemote(description),
+      postedAt: d.datePosted ? new Date(d.datePosted) : null,
+      source,
+    };
+  }
+
+  // Heuristic HTML extraction
+  $("script, style, nav, footer, header").remove();
+
+  const title =
+    $('h1[class*="title"], h1[class*="job"], [class*="job-title"]').first().text().trim() ||
+    $("h1").first().text().trim();
+
+  const company =
+    $('[class*="company"], [class*="employer"], [itemprop="name"]').first().text().trim() ||
+    $("title").text().split(/[-|at]/i)[1]?.trim() ||
+    new URL(url).hostname.replace("www.", "").split(".")[0];
+
+  const location =
+    $('[class*="location"], [itemprop="addressLocality"]').first().text().trim() ||
+    null;
+
+  // Extract main content — try common containers
+  const contentEl =
+    $('[class*="description"], [class*="content"], [id*="description"], main, article').first();
+  const description = htmlToText(contentEl.html() ?? $("body").html() ?? "");
+
+  const salary = extractSalary(description);
+
+  return {
+    title,
+    company,
+    location,
+    description: description.slice(0, 8000), // cap length
+    requirements: null,
+    niceToHaves: null,
+    skills: extractSkills(description),
+    experienceLevel: detectExperienceLevel(title + " " + description),
+    salaryMin: salary.min,
+    salaryMax: salary.max,
+    remote: detectRemote((location ?? "") + " " + description),
+    postedAt: null,
+    source,
+  };
+}
+
+// ── Public entrypoint ─────────────────────────────────────────────────────────
+export async function scrapeJobPosting(url: string): Promise<ScrapedJob> {
+  const normalised = url.trim();
+
+  if (normalised.includes("boards.greenhouse.io") || normalised.includes("greenhouse.io/jobs")) {
+    return scrapeGreenhouse(normalised);
+  }
+  if (normalised.includes("jobs.lever.co")) {
+    return scrapeLever(normalised);
+  }
+  if (normalised.includes("ashbyhq.com")) {
+    return scrapeAshby(normalised);
+  }
+
+  return scrapeGeneric(
+    normalised,
+    normalised.includes("linkedin.com")
+      ? "linkedin"
+      : normalised.includes("indeed.com")
+      ? "indeed"
+      : normalised.includes("myworkday.com") || normalised.includes("workday.com")
+      ? "workday"
+      : "manual"
+  );
+}
+
+export function buildJobFromManual(opts: {
+  title: string;
+  company: string;
+  location?: string;
+  description: string;
+}): ScrapedJob {
+  const description = opts.description;
+  const salary = extractSalary(description);
+  return {
+    title: opts.title,
+    company: opts.company,
+    location: opts.location ?? null,
+    description,
+    requirements: null,
+    niceToHaves: null,
+    skills: extractSkills(description),
+    experienceLevel: detectExperienceLevel(opts.title + " " + description),
+    salaryMin: salary.min,
+    salaryMax: salary.max,
+    remote: detectRemote(description),
+    postedAt: null,
+    source: "manual",
+  };
+}
