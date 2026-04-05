@@ -15,23 +15,24 @@ interface Profile {
   summary: string | null;
 }
 
-const BATCH_SIZE = 15;
+// Score in smaller batches — thinking models produce longer responses
+const BATCH_SIZE = 5;
 
 function extractJsonArray(raw: string): string {
   const trimmed = raw.trim();
 
-  // Strategy 1: strip leading ``` fence
+  // Strategy 1: strip fences
   if (trimmed.startsWith("```")) {
     const withoutOpen = trimmed.replace(/^```(?:json)?\s*/i, "");
     const withoutClose = withoutOpen.replace(/\s*```\s*$/, "");
     if (withoutClose.includes("[")) return withoutClose.trim();
   }
 
-  // Strategy 2: regex for fenced block
+  // Strategy 2: fenced block via regex
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenced) return fenced[1].trim();
 
-  // Strategy 3: find outermost [ ... ]
+  // Strategy 3: outermost [ ... ]
   const start = trimmed.indexOf("[");
   const end = trimmed.lastIndexOf("]");
   if (start !== -1 && end !== -1) return trimmed.slice(start, end + 1);
@@ -47,7 +48,7 @@ function buildScoringPrompt(jobs: DiscoveredJobInput[], profile: Profile): strin
     )
     .join("\n");
 
-  return `Score each job listing (0-100) for relevance to this candidate. Return a JSON array of exactly ${jobs.length} objects in the same order as the input, each with "score" (integer 0-100) and "reasoning" (one concise sentence).
+  return `Score each job listing (0-100) for relevance to this candidate. Return a JSON array of exactly ${jobs.length} objects in the same order, each with "score" (integer 0-100) and "reasoning" (one sentence).
 
 Candidate:
 - Target roles: ${profile.targetRoles.join(", ") || "Not specified"}
@@ -67,34 +68,52 @@ Scoring:
 Jobs:
 ${jobList}
 
-Return ONLY a raw JSON array — no markdown, no code fences, no extra text.
+Return ONLY a raw JSON array. No markdown, no code fences, no extra text.
 Example: [{"score": 85, "reasoning": "Matches target role and key skills."}, {"score": 40, "reasoning": "Different domain."}]`;
 }
 
-async function scoreBatch(
-  jobs: DiscoveredJobInput[],
-  profile: Profile
-): Promise<Array<{ score: number; reasoning: string }>> {
+// Use streaming (same as analyze pipeline) — works reliably with thinking models
+async function runGeminiStream(prompt: string): Promise<string> {
   const client = getGeminiClient();
   const model = client.getGenerativeModel({
     model: MODEL,
     generationConfig: { maxOutputTokens: 2048, temperature: 0 },
   });
 
-  const prompt = buildScoringPrompt(jobs, profile);
-  const result = await model.generateContent(prompt);
-  const raw = result.response.text();
+  let fullText = "";
+  const result = await model.generateContentStream(prompt);
+  for await (const chunk of result.stream) {
+    const text = chunk.text();
+    if (text) fullText += text;
+  }
+  return fullText;
+}
 
-  console.log("[score-jobs] Raw response (first 300):", raw.slice(0, 300));
+async function scoreBatch(
+  jobs: DiscoveredJobInput[],
+  profile: Profile
+): Promise<Array<{ score: number; reasoning: string }>> {
+  const prompt = buildScoringPrompt(jobs, profile);
+
+  console.log(`[score-jobs] Scoring batch of ${jobs.length} jobs`);
+  console.log(`[score-jobs] Prompt length: ${prompt.length} chars`);
+
+  const raw = await runGeminiStream(prompt);
+
+  console.log(`[score-jobs] Raw response (${raw.length} chars):`, raw.slice(0, 600));
 
   const jsonStr = extractJsonArray(raw);
+  console.log(`[score-jobs] Extracted JSON string:`, jsonStr.slice(0, 300));
+
   const parsed = JSON.parse(jsonStr) as Array<{ score: number; reasoning: string }>;
 
   if (!Array.isArray(parsed)) {
-    throw new Error("Response is not a JSON array");
+    throw new Error(`Expected array, got ${typeof parsed}`);
   }
 
-  // If lengths differ, pad or trim rather than throw
+  console.log(`[score-jobs] Parsed ${parsed.length} scores`);
+
+  // Pad/trim to match batch length rather than throwing
   const results: Array<{ score: number; reasoning: string }> = [];
   for (let i = 0; i < jobs.length; i++) {
     const item = parsed[i];
@@ -112,41 +131,40 @@ export async function batchScoreJobs(
 ): Promise<ScoredJob[]> {
   const scored: ScoredJob[] = [];
 
+  console.log(`[score-jobs] Starting batch scoring for ${jobs.length} jobs in batches of ${BATCH_SIZE}`);
+  console.log(`[score-jobs] Profile targetRoles: ${profile.targetRoles.join(", ")}`);
+  console.log(`[score-jobs] Profile skills (first 5): ${profile.skills.slice(0, 5).join(", ")}`);
+
   for (let i = 0; i < jobs.length; i += BATCH_SIZE) {
     const batch = jobs.slice(i, i + BATCH_SIZE);
-
     let scores: Array<{ score: number; reasoning: string }> | null = null;
 
-    // Try once, retry once on failure
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         scores = await scoreBatch(batch, profile);
         break;
       } catch (err) {
-        console.error(`[score-jobs] Batch ${i / BATCH_SIZE + 1} attempt ${attempt + 1} failed:`, err);
-        if (attempt === 0) await new Promise((r) => setTimeout(r, 1500));
+        console.error(`[score-jobs] Batch starting at ${i}, attempt ${attempt} failed:`, err instanceof Error ? err.message : err);
+        if (attempt === 1) await new Promise((r) => setTimeout(r, 2000));
       }
     }
 
     if (scores) {
       for (let j = 0; j < batch.length; j++) {
-        scored.push({
-          ...batch[j],
-          relevanceScore: scores[j].score,
-          reasoning: scores[j].reasoning,
-        });
+        scored.push({ ...batch[j], relevanceScore: scores[j].score, reasoning: scores[j].reasoning });
       }
     } else {
-      // Both attempts failed — default to 0
+      console.error(`[score-jobs] Both attempts failed for batch at index ${i}, defaulting to 0`);
       for (const job of batch) {
         scored.push({ ...job, relevanceScore: 0, reasoning: "" });
       }
     }
 
     if (i + BATCH_SIZE < jobs.length) {
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 800));
     }
   }
 
+  console.log(`[score-jobs] Done. Scores: ${scored.map(j => j.relevanceScore).join(", ")}`);
   return scored;
 }

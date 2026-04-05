@@ -11,7 +11,19 @@ const createSchema = z.object({
 export async function GET() {
   try {
     const applications = await prisma.application.findMany({
-      include: { job: true, resume: { select: { id: true, name: true } } },
+      include: {
+        job: {
+          include: {
+            analyses: {
+              orderBy: { createdAt: "desc" },
+              take: 1,
+              select: { overallFitScore: true, shouldApply: true, id: true },
+            },
+          },
+        },
+        resume: { select: { id: true, name: true } },
+        statusHistory: { orderBy: { changedAt: "asc" } },
+      },
       orderBy: { createdAt: "desc" },
     });
     return NextResponse.json({ success: true, data: applications });

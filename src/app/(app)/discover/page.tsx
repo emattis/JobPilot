@@ -23,7 +23,7 @@ export default function DiscoverPage() {
   const [loading, setLoading] = useState(true);
   const [scan, setScan] = useState<ScanPhase>({ type: "idle" });
   const [sourceFilter, setSourceFilter] = useState("all");
-  const [minScore, setMinScore] = useState(0);
+  const [minScore, setMinScore] = useState(80);
 
   const loadJobs = useCallback(async () => {
     try {
@@ -232,7 +232,8 @@ export default function DiscoverPage() {
               <option value={40}>40+</option>
               <option value={60}>60+</option>
               <option value={70}>70+</option>
-              <option value={80}>80+</option>
+              <option value={80}>80+ (default)</option>
+              <option value={90}>90+</option>
             </select>
           </div>
         </div>

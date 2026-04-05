@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { scrapeYCJobs } from "@/lib/scrapers/yc";
 import { discoverGreenhouseJobs } from "@/lib/scrapers/greenhouse-discover";
 import { discoverLeverJobs } from "@/lib/scrapers/lever-discover";
 import { batchScoreJobs } from "@/lib/ai/score-jobs";
@@ -10,15 +9,21 @@ function matchesLocation(
   job: { location: string | null; remote: boolean | null },
   preferredLocations: string[]
 ): boolean {
+  // No filter set — show everything
   if (preferredLocations.length === 0) return true;
+
+  // Always show remote jobs if "Remote" is in preferred OR preferRemote is implied
   if (job.remote === true) return true;
-  if (job.location === null) return true; // unknown — don't filter out
+
+  // If location is unknown we can't confirm a match — exclude to be safe when filter is active
+  if (job.location === null || job.location.trim() === "") return false;
+
   const loc = job.location.toLowerCase();
-  return preferredLocations.some((pref) =>
-    pref.toLowerCase() === "remote"
-      ? job.remote === true
-      : loc.includes(pref.toLowerCase())
-  );
+  return preferredLocations.some((pref) => {
+    const p = pref.toLowerCase().trim();
+    if (p === "remote") return job.remote === true;
+    return loc.includes(p);
+  });
 }
 
 // ── GET: return existing discovered jobs ─────────────────────────────────────
@@ -34,7 +39,11 @@ export async function GET() {
     ]);
 
     const preferredLocations = profile?.preferredLocations ?? [];
+    console.log(`[discover] preferredLocations from DB: [${preferredLocations.join(", ")}]`);
+    console.log(`[discover] Total jobs before filter: ${rawJobs.length}`);
+
     const jobs = rawJobs.filter((j) => matchesLocation(j, preferredLocations));
+    console.log(`[discover] Jobs after location filter: ${jobs.length}`);
 
     return NextResponse.json({ success: true, data: jobs });
   } catch {
@@ -89,79 +98,71 @@ export async function POST() {
           return;
         }
 
-        // ── Collect known URLs to skip ─────────────────────────────────────
-        const existingUrls = new Set(
-          (await prisma.discoveredJob.findMany({ select: { url: true } })).map(
-            (j) => j.url
-          )
+        console.log(`[discover] targetRoles: ${profile.targetRoles.join(", ")}`);
+        console.log(`[discover] targetCompanies: ${profile.targetCompanies.join(", ")}`);
+        console.log(`[discover] preferredLocations: [${(profile.preferredLocations ?? []).join(", ")}]`);
+
+        // ── Load existing DB state ─────────────────────────────────────────
+        const existingJobs = await prisma.discoveredJob.findMany({
+          select: { id: true, url: true, relevanceScore: true },
+        });
+        const existingByUrl = new Map(existingJobs.map((j) => [j.url, j]));
+
+        // Jobs that need re-scoring: previously failed (score = 0 or null)
+        const staleUrls = new Set(
+          existingJobs
+            .filter((j) => j.relevanceScore === null || j.relevanceScore === 0)
+            .map((j) => j.url)
         );
+        console.log(`[discover] ${existingJobs.size} existing jobs, ${staleUrls.size} need re-scoring`);
 
-        const allFound: DiscoveredJobInput[] = [];
-
-        // ── YC Work at a Startup ───────────────────────────────────────────
-        send({ type: "status", message: "Scanning YC Work at a Startup…" });
-        try {
-          const ycJobs = await scrapeYCJobs(
-            profile.targetRoles,
-            profile.preferRemote
-          );
-          const newYC = ycJobs.filter((j) => !existingUrls.has(j.url));
-          newYC.forEach((j) => existingUrls.add(j.url));
-          allFound.push(...newYC);
-          send({
-            type: "status",
-            message: `YC: found ${newYC.length} new job${newYC.length !== 1 ? "s" : ""}`,
-          });
-        } catch {
-          send({ type: "status", message: "YC scan failed — skipping" });
-        }
+        const newJobsToScore: DiscoveredJobInput[] = [];
 
         // ── Company boards (Greenhouse + Lever) ────────────────────────────
         const companies = profile.targetCompanies.slice(0, 20);
-        if (companies.length > 0) {
+        if (companies.length === 0) {
+          send({ type: "status", message: "No target companies set — add companies to your profile to discover jobs" });
+        } else {
           send({
             type: "status",
             message: `Scanning ${companies.length} company board${companies.length !== 1 ? "s" : ""}…`,
           });
 
           for (const company of companies) {
-            // Try Greenhouse
-            try {
-              const ghJobs = await discoverGreenhouseJobs(
-                company,
-                profile.targetRoles
-              );
-              const newGH = ghJobs.filter((j) => !existingUrls.has(j.url));
-              newGH.forEach((j) => existingUrls.add(j.url));
-              allFound.push(...newGH);
-            } catch {
-              // per-company failures are silent
-            }
+            const ghJobs = await discoverGreenhouseJobs(company, profile.targetRoles);
+            const lvJobs = await discoverLeverJobs(company, profile.targetRoles);
 
-            // Try Lever
-            try {
-              const lvJobs = await discoverLeverJobs(
-                company,
-                profile.targetRoles
-              );
-              const newLV = lvJobs.filter((j) => !existingUrls.has(j.url));
-              newLV.forEach((j) => existingUrls.add(j.url));
-              allFound.push(...newLV);
-            } catch {
-              // per-company failures are silent
+            for (const job of [...ghJobs, ...lvJobs]) {
+              if (!existingByUrl.has(job.url)) {
+                // Brand new job
+                existingByUrl.set(job.url, { id: "", url: job.url, relevanceScore: null });
+                newJobsToScore.push(job);
+              } else if (staleUrls.has(job.url)) {
+                // Already in DB but needs re-scoring
+                newJobsToScore.push(job);
+              }
             }
 
             await new Promise((r) => setTimeout(r, 300));
           }
-
-          send({
-            type: "status",
-            message: `Company boards: found ${allFound.filter((j) => j.source !== "yc").length} new jobs`,
-          });
         }
 
-        if (allFound.length === 0) {
-          send({ type: "complete", newJobs: 0, jobs: [] });
+        console.log(`[discover] ${newJobsToScore.length} jobs to score (new + stale)`);
+        send({
+          type: "status",
+          message: `Found ${newJobsToScore.length} job${newJobsToScore.length !== 1 ? "s" : ""} to score…`,
+        });
+
+        if (newJobsToScore.length === 0) {
+          // Nothing new or stale — just return the current feed
+          const allRaw = await prisma.discoveredJob.findMany({
+            where: { dismissed: false },
+            orderBy: [{ relevanceScore: "desc" }, { savedAt: "desc" }],
+          });
+          const preferredLocations = profile.preferredLocations ?? [];
+          const allJobs = allRaw.filter((j) => matchesLocation(j, preferredLocations));
+          console.log(`[discover] No new jobs; returning ${allJobs.length} existing (${allRaw.length} before location filter)`);
+          send({ type: "complete", newJobs: 0, jobs: allJobs });
           controller.close();
           return;
         }
@@ -169,10 +170,10 @@ export async function POST() {
         // ── AI relevance scoring ────────────────────────────────────────────
         send({
           type: "status",
-          message: `Scoring ${allFound.length} job${allFound.length !== 1 ? "s" : ""} with AI…`,
+          message: `Scoring ${newJobsToScore.length} job${newJobsToScore.length !== 1 ? "s" : ""} with AI…`,
         });
 
-        const scored = await batchScoreJobs(allFound, {
+        const scored = await batchScoreJobs(newJobsToScore, {
           skills: profile.skills,
           targetRoles: profile.targetRoles,
           yearsExperience: profile.yearsExperience,
@@ -206,7 +207,8 @@ export async function POST() {
           )
         );
 
-        const savedCount = saved.filter((r) => r.status === "fulfilled").length;
+        const newCount = scored.filter((j) => !staleUrls.has(j.url)).length;
+        console.log(`[discover] Saved ${saved.filter((r) => r.status === "fulfilled").length}; ${newCount} genuinely new`);
 
         // Return full feed sorted by score, filtered by location preference
         const allRaw = await prisma.discoveredJob.findMany({
@@ -214,19 +216,17 @@ export async function POST() {
           orderBy: [{ relevanceScore: "desc" }, { savedAt: "desc" }],
         });
         const preferredLocations = profile.preferredLocations ?? [];
+        console.log(`[discover] preferredLocations filter: [${preferredLocations.join(", ")}], raw feed: ${allRaw.length} jobs`);
         const allJobs = allRaw.filter((j) => matchesLocation(j, preferredLocations));
+        console.log(`[discover] After location filter: ${allJobs.length} jobs`);
 
-        send({
-          type: "complete",
-          newJobs: savedCount,
-          jobs: allJobs,
-        });
+        send({ type: "complete", newJobs: newCount, jobs: allJobs });
       } catch (err) {
+        console.error("[discover] POST error:", err);
         send({
           type: "error",
           error: err instanceof Error ? err.message : "Unexpected error",
         });
-      } finally {
         controller.close();
       }
     },

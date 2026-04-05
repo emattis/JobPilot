@@ -42,41 +42,49 @@ export async function discoverGreenhouseJobs(
   const slug = companyToSlug(companyName);
   const apiUrl = `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs?content=true`;
 
+  console.log(`[greenhouse] Fetching ${companyName} (${slug}): ${apiUrl}`);
+
   try {
     const res = await fetch(apiUrl, {
       headers: { "User-Agent": USER_AGENT },
       signal: AbortSignal.timeout(10000),
     });
 
+    console.log(`[greenhouse] ${companyName}: HTTP ${res.status}`);
     if (!res.ok) return [];
 
     const data = (await res.json()) as GreenhouseResponse;
-    if (!Array.isArray(data.jobs)) return [];
+    if (!Array.isArray(data.jobs)) {
+      console.log(`[greenhouse] ${companyName}: unexpected response shape`);
+      return [];
+    }
 
-    const rolePatterns = targetRoles.map((r) => new RegExp(r, "i"));
+    console.log(`[greenhouse] ${companyName}: ${data.jobs.length} total jobs`);
 
-    return data.jobs
-      .filter((job) => {
-        if (rolePatterns.length === 0) return true;
-        return rolePatterns.some((re) => re.test(job.title));
-      })
-      .map((job) => {
-        const locationName = job.location?.name ?? null;
-        const snippet = job.content
-          ? htmlToText(job.content).slice(0, 400)
-          : "";
+    const rolePatterns = targetRoles.map((r) => new RegExp(r.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
 
-        return {
-          url: job.absolute_url,
-          title: job.title,
-          company: companyName,
-          location: locationName,
-          remote: detectRemote((locationName ?? "") + " " + snippet),
-          source: "greenhouse",
-          snippet,
-        };
-      });
-  } catch {
+    const filtered = data.jobs.filter((job) => {
+      if (rolePatterns.length === 0) return true;
+      return rolePatterns.some((re) => re.test(job.title));
+    });
+
+    console.log(`[greenhouse] ${companyName}: ${filtered.length} jobs after role filter (roles: ${targetRoles.slice(0, 3).join(", ")}…)`);
+
+    return filtered.map((job) => {
+      const locationName = job.location?.name ?? null;
+      const snippet = job.content ? htmlToText(job.content).slice(0, 400) : "";
+      return {
+        url: job.absolute_url,
+        title: job.title,
+        company: companyName,
+        location: locationName,
+        remote: detectRemote((locationName ?? "") + " " + snippet),
+        source: "greenhouse",
+        snippet,
+      };
+    });
+  } catch (err) {
+    console.error(`[greenhouse] ${companyName}: error —`, err instanceof Error ? err.message : err);
     return [];
   }
 }
