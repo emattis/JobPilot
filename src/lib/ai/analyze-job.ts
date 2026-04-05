@@ -1,12 +1,16 @@
 import { getGeminiClient, MODEL, MAX_OUTPUT_TOKENS } from "./client";
-import { ANALYZE_SYSTEM_PROMPT, buildAnalyzePrompt } from "./prompts";
-import type { ScrapedJob, AnalysisResult } from "@/types/analysis";
+import {
+  ROLE_ANALYSIS_SYSTEM_PROMPT,
+  CANDIDATE_FIT_SYSTEM_PROMPT,
+  buildRoleAnalysisPrompt,
+  buildCandidateFitPrompt,
+} from "./prompts";
+import type { ScrapedJob, RoleAnalysisCache, AnalysisResult } from "@/types/analysis";
 
 function extractJson(raw: string): string {
   const trimmed = raw.trim();
 
   // Strategy 1: strip leading ```json or ``` and trailing ```
-  // Handles the common Gemini pattern of wrapping the entire response in a code fence
   if (trimmed.startsWith("```")) {
     const withoutOpen = trimmed.replace(/^```(?:json)?\s*/i, "");
     const withoutClose = withoutOpen.replace(/\s*```\s*$/, "");
@@ -25,24 +29,20 @@ function extractJson(raw: string): string {
   return trimmed;
 }
 
-export async function analyzeJob(
-  job: ScrapedJob,
-  companyInfo: string | null,
-  profile: Parameters<typeof buildAnalyzePrompt>[0]["profile"],
-  resumeText: string | null,
+async function runGemini(
+  systemInstruction: string,
+  prompt: string,
   onToken?: (token: string) => void
-): Promise<AnalysisResult> {
+): Promise<string> {
   const client = getGeminiClient();
   const model = client.getGenerativeModel({
     model: MODEL,
-    systemInstruction: ANALYZE_SYSTEM_PROMPT,
+    systemInstruction,
     generationConfig: {
       maxOutputTokens: MAX_OUTPUT_TOKENS,
       temperature: 0.3,
     },
   });
-
-  const prompt = buildAnalyzePrompt({ job, companyInfo, profile, resumeText });
 
   let fullText = "";
   const result = await model.generateContentStream(prompt);
@@ -55,14 +55,46 @@ export async function analyzeJob(
     }
   }
 
-  const jsonStr = extractJson(fullText);
+  return fullText;
+}
 
-  let parsed: AnalysisResult;
+// ── Phase 1: Role analysis (cached per job) ───────────────────────────────────
+
+export async function analyzeRole(
+  job: ScrapedJob,
+  companyInfo: string | null
+): Promise<RoleAnalysisCache> {
+  const prompt = buildRoleAnalysisPrompt(job, companyInfo);
+  const raw = await runGemini(ROLE_ANALYSIS_SYSTEM_PROMPT, prompt);
+  const jsonStr = extractJson(raw);
+
   try {
-    parsed = JSON.parse(jsonStr) as AnalysisResult;
+    return JSON.parse(jsonStr) as RoleAnalysisCache;
   } catch {
-    console.error("Gemini raw response (first 500 chars):", fullText.slice(0, 500));
-    throw new Error(`Failed to parse AI response as JSON. Starts with: "${fullText.slice(0, 80)}"`);
+    console.error("Role analysis raw response (first 500):", raw.slice(0, 500));
+    throw new Error(`Failed to parse role analysis JSON. Starts with: "${raw.slice(0, 80)}"`);
+  }
+}
+
+// ── Phase 2: Candidate fit (always fresh) ────────────────────────────────────
+
+export async function analyzeCandidateFit(
+  job: ScrapedJob,
+  roleCache: RoleAnalysisCache,
+  profile: Parameters<typeof buildCandidateFitPrompt>[0]["profile"],
+  resumeText: string | null,
+  onToken?: (token: string) => void
+): Promise<AnalysisResult> {
+  const prompt = buildCandidateFitPrompt({ job, roleCache, profile, resumeText });
+  const raw = await runGemini(CANDIDATE_FIT_SYSTEM_PROMPT, prompt, onToken);
+  const jsonStr = extractJson(raw);
+
+  let parsed: Omit<AnalysisResult, "companyAnalysis">;
+  try {
+    parsed = JSON.parse(jsonStr) as Omit<AnalysisResult, "companyAnalysis">;
+  } catch {
+    console.error("Candidate fit raw response (first 500):", raw.slice(0, 500));
+    throw new Error(`Failed to parse candidate fit JSON. Starts with: "${raw.slice(0, 80)}"`);
   }
 
   // Clamp all scores to 0-100
@@ -74,8 +106,15 @@ export async function analyzeJob(
     "growthPotentialScore",
   ] as const;
   for (const field of scoreFields) {
-    parsed[field] = Math.max(0, Math.min(100, Math.round(Number(parsed[field]) || 0)));
+    (parsed as Record<string, number>)[field] = Math.max(
+      0,
+      Math.min(100, Math.round(Number((parsed as Record<string, number>)[field]) || 0))
+    );
   }
 
-  return parsed;
+  // Merge company analysis from the role cache
+  return {
+    ...parsed,
+    companyAnalysis: roleCache.companyAnalysis,
+  } as AnalysisResult;
 }

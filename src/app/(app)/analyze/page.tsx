@@ -16,6 +16,7 @@ type Phase =
       jobId: string;
       analysisId: string;
       jobUrl: string;
+      fromCache: boolean;
     }
   | { type: "error"; error: string; allowManual: boolean };
 
@@ -90,6 +91,7 @@ export default function AnalyzePage() {
               jobId: event.jobId,
               analysisId: event.analysisId,
               jobUrl: urlToUse,
+              fromCache: event.fromCache ?? false,
             });
           } else if (event.type === "error") {
             setPhase({
@@ -379,6 +381,7 @@ export default function AnalyzePage() {
             job={phase.job}
             jobId={phase.jobId}
             jobUrl={phase.jobUrl}
+            fromCache={phase.fromCache}
           />
         </div>
       )}

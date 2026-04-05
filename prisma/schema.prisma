@@ -93,6 +93,10 @@ model JobPosting {
   scrapedAt       DateTime  @default(now())
   expiresAt       DateTime?
 
+  // Cached role analysis — company insights + requirements, independent of any candidate
+  roleAnalysisCache    String?   @db.Text
+  roleAnalysisCachedAt DateTime?
+
   analyses     JobAnalysis[]
   applications Application[]
 }

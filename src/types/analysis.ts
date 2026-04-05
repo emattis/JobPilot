@@ -14,6 +14,17 @@ export interface ScrapedJob {
   source: string;
 }
 
+/** Cached per-job role analysis — independent of any candidate */
+export interface RoleAnalysisCache {
+  companyAnalysis: string;
+  cultureInsights: string;
+  keySkillsNeeded: string[];
+  niceToHaveSkills: string[];
+  roleRequirements: string;
+  experienceLevelExpected: string | null;
+}
+
+/** Candidate-fit analysis — always runs fresh against current profile/resume */
 export interface AnalysisResult {
   overallFitScore: number;
   skillMatchScore: number;
@@ -29,10 +40,17 @@ export interface AnalysisResult {
   resumeImprovements: string;
   coverLetterTips: string;
   interviewPrepTopics: string[];
-  companyAnalysis: string;
+  companyAnalysis: string; // surfaced from RoleAnalysisCache
 }
 
 export type SseEvent =
   | { type: "status"; message: string }
-  | { type: "complete"; analysisId: string; jobId: string; result: AnalysisResult; job: ScrapedJob }
+  | {
+      type: "complete";
+      analysisId: string;
+      jobId: string;
+      result: AnalysisResult;
+      job: ScrapedJob;
+      fromCache: boolean;
+    }
   | { type: "error"; error: string; allowManual?: boolean };

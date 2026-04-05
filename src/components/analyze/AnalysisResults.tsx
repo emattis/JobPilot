@@ -17,6 +17,7 @@ import {
   Lightbulb,
   FileText,
   MessageSquare,
+  Database,
 } from "lucide-react";
 import { ScoreRing, ScoreBar } from "./ScoreRing";
 import type { AnalysisResult, ScrapedJob } from "@/types/analysis";
@@ -88,9 +89,10 @@ interface AnalysisResultsProps {
   job: ScrapedJob;
   jobId: string;
   jobUrl?: string;
+  fromCache?: boolean;
 }
 
-export function AnalysisResults({ result, job, jobId, jobUrl }: AnalysisResultsProps) {
+export function AnalysisResults({ result, job, jobId, jobUrl, fromCache }: AnalysisResultsProps) {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -135,7 +137,15 @@ export function AnalysisResults({ result, job, jobId, jobUrl }: AnalysisResultsP
       <div className="rounded-xl border border-border bg-card p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <h2 className="text-lg font-bold leading-tight truncate">{job.title}</h2>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-lg font-bold leading-tight truncate">{job.title}</h2>
+              {fromCache && (
+                <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-md border border-sky-500/20 bg-sky-500/10 text-sky-400 shrink-0">
+                  <Database className="w-3 h-3" />
+                  Cached
+                </span>
+              )}
+            </div>
             <div className="flex flex-wrap items-center gap-3 mt-1.5 text-sm text-muted-foreground">
               <span className="flex items-center gap-1.5">
                 <Building2 className="w-3.5 h-3.5" />
