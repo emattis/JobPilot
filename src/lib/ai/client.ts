@@ -13,5 +13,5 @@ export function getGeminiClient(): GoogleGenerativeAI {
   return _client;
 }
 
-export const MODEL = "gemini-2.5-pro-exp-03-25";
+export const MODEL = "gemini-2.5-pro";
 export const MAX_OUTPUT_TOKENS = 8192;

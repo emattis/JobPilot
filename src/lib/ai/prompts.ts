@@ -10,7 +10,9 @@ Score interpretation:
 - 40-59: Stretch — significant gaps, apply if motivated
 - 0-39: Poor fit — probably skip
 
-Be specific and direct. Name actual skills. Reference actual job requirements. Avoid generic advice.`;
+Be specific and direct. Name actual skills. Reference actual job requirements. Avoid generic advice.
+
+Never suggest correcting dates or factual details on the candidate's resume. Assume all dates, titles, and facts on the resume are accurate. Only suggest changes to wording, emphasis, ordering, and keyword optimization.`;
 
 export function buildAnalyzePrompt(opts: {
   job: ScrapedJob;
