@@ -1,4 +1,5 @@
 import { getGeminiClient, MODEL } from "./client";
+import { parseAiArray } from "./parse-json";
 import type { DiscoveredJobInput } from "@/lib/scrapers/yc";
 
 export interface ScoredJob extends DiscoveredJobInput {
@@ -17,28 +18,6 @@ interface Profile {
 
 // Score in smaller batches — thinking models produce longer responses
 const BATCH_SIZE = 5;
-
-function extractJsonArray(raw: string): string {
-  const trimmed = raw.trim();
-
-  // Strategy 1: strip fences
-  if (trimmed.startsWith("```")) {
-    const withoutOpen = trimmed.replace(/^```(?:json)?\s*/i, "");
-    const withoutClose = withoutOpen.replace(/\s*```\s*$/, "");
-    if (withoutClose.includes("[")) return withoutClose.trim();
-  }
-
-  // Strategy 2: fenced block via regex
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fenced) return fenced[1].trim();
-
-  // Strategy 3: outermost [ ... ]
-  const start = trimmed.indexOf("[");
-  const end = trimmed.lastIndexOf("]");
-  if (start !== -1 && end !== -1) return trimmed.slice(start, end + 1);
-
-  return trimmed;
-}
 
 function buildScoringPrompt(jobs: DiscoveredJobInput[], profile: Profile): string {
   const jobList = jobs
@@ -102,14 +81,13 @@ async function scoreBatch(
 
   console.log(`[score-jobs] Raw response (${raw.length} chars):`, raw.slice(0, 600));
 
-  const jsonStr = extractJsonArray(raw);
-  console.log(`[score-jobs] Extracted JSON string:`, jsonStr.slice(0, 300));
-
-  const parsed = JSON.parse(jsonStr) as Array<{ score: number; reasoning: string }>;
+  const parsed = parseAiArray<{ score: number; reasoning: string }>(raw);
 
   if (!Array.isArray(parsed)) {
     throw new Error(`Expected array, got ${typeof parsed}`);
   }
+
+  console.log(`[score-jobs] Extracted and sanitized JSON (${parsed.length} items)`);
 
   console.log(`[score-jobs] Parsed ${parsed.length} scores`);
 

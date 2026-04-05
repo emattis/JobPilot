@@ -1,4 +1,5 @@
 import { getGeminiClient, MODEL } from "./client";
+import { parseAiObject } from "./parse-json";
 
 export type SuggestionType = "reword" | "add" | "remove" | "reorder";
 
@@ -74,21 +75,6 @@ Analyze this resume against the target job and produce the JSON optimization rep
 5. Strengthening the summary/objective if present`;
 }
 
-function extractJson(raw: string): string {
-  const trimmed = raw.trim();
-  if (trimmed.startsWith("```")) {
-    const withoutOpen = trimmed.replace(/^```(?:json)?\s*/i, "");
-    const withoutClose = withoutOpen.replace(/\s*```\s*$/, "");
-    if (withoutClose.includes("{")) return withoutClose.trim();
-  }
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fenced) return fenced[1].trim();
-  const start = trimmed.indexOf("{");
-  const end = trimmed.lastIndexOf("}");
-  if (start !== -1 && end !== -1) return trimmed.slice(start, end + 1);
-  return trimmed;
-}
-
 export async function optimizeResume(
   resumeText: string,
   job: { title: string; company: string; description: string; requirements: string | null },
@@ -111,8 +97,7 @@ export async function optimizeResume(
     onToken?.(text);
   }
 
-  const jsonStr = extractJson(raw);
-  const parsed = JSON.parse(jsonStr) as OptimizationResult;
+  const parsed = parseAiObject<OptimizationResult>(raw);
 
   // Ensure all suggestions have IDs
   parsed.suggestions = parsed.suggestions.map((s, i) => ({

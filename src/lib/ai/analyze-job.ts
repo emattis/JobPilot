@@ -5,29 +5,8 @@ import {
   buildRoleAnalysisPrompt,
   buildCandidateFitPrompt,
 } from "./prompts";
+import { parseAiObject } from "./parse-json";
 import type { ScrapedJob, RoleAnalysisCache, AnalysisResult } from "@/types/analysis";
-
-function extractJson(raw: string): string {
-  const trimmed = raw.trim();
-
-  // Strategy 1: strip leading ```json or ``` and trailing ```
-  if (trimmed.startsWith("```")) {
-    const withoutOpen = trimmed.replace(/^```(?:json)?\s*/i, "");
-    const withoutClose = withoutOpen.replace(/\s*```\s*$/, "");
-    if (withoutClose.includes("{")) return withoutClose.trim();
-  }
-
-  // Strategy 2: regex extraction for inline fences
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/s);
-  if (fenced) return fenced[1].trim();
-
-  // Strategy 3: extract outermost { ... } object
-  const start = trimmed.indexOf("{");
-  const end = trimmed.lastIndexOf("}");
-  if (start !== -1 && end !== -1) return trimmed.slice(start, end + 1);
-
-  return trimmed;
-}
 
 async function runGemini(
   systemInstruction: string,
@@ -66,10 +45,9 @@ export async function analyzeRole(
 ): Promise<RoleAnalysisCache> {
   const prompt = buildRoleAnalysisPrompt(job, companyInfo);
   const raw = await runGemini(ROLE_ANALYSIS_SYSTEM_PROMPT, prompt);
-  const jsonStr = extractJson(raw);
 
   try {
-    return JSON.parse(jsonStr) as RoleAnalysisCache;
+    return parseAiObject<RoleAnalysisCache>(raw);
   } catch {
     console.error("Role analysis raw response (first 500):", raw.slice(0, 500));
     throw new Error(`Failed to parse role analysis JSON. Starts with: "${raw.slice(0, 80)}"`);
@@ -87,11 +65,10 @@ export async function analyzeCandidateFit(
 ): Promise<AnalysisResult> {
   const prompt = buildCandidateFitPrompt({ job, roleCache, profile, resumeText });
   const raw = await runGemini(CANDIDATE_FIT_SYSTEM_PROMPT, prompt, onToken);
-  const jsonStr = extractJson(raw);
 
   let parsed: Omit<AnalysisResult, "companyAnalysis">;
   try {
-    parsed = JSON.parse(jsonStr) as Omit<AnalysisResult, "companyAnalysis">;
+    parsed = parseAiObject<Omit<AnalysisResult, "companyAnalysis">>(raw);
   } catch {
     console.error("Candidate fit raw response (first 500):", raw.slice(0, 500));
     throw new Error(`Failed to parse candidate fit JSON. Starts with: "${raw.slice(0, 80)}"`);
