@@ -1,12 +1,12 @@
-import { getAnthropicClient, MODEL, MAX_TOKENS } from "./client";
+import { getGeminiClient, MODEL, MAX_OUTPUT_TOKENS } from "./client";
 import { ANALYZE_SYSTEM_PROMPT, buildAnalyzePrompt } from "./prompts";
 import type { ScrapedJob, AnalysisResult } from "@/types/analysis";
 
 function extractJson(raw: string): string {
-  // Strip markdown code fences if Claude wraps the JSON
+  // Strip markdown code fences if the model wraps the JSON
   const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenced) return fenced[1].trim();
-  // Try to find the outermost JSON object
+  // Find the outermost JSON object
   const start = raw.indexOf("{");
   const end = raw.lastIndexOf("}");
   if (start !== -1 && end !== -1) return raw.slice(start, end + 1);
@@ -20,25 +20,26 @@ export async function analyzeJob(
   resumeText: string | null,
   onToken?: (token: string) => void
 ): Promise<AnalysisResult> {
-  const client = getAnthropicClient();
+  const client = getGeminiClient();
+  const model = client.getGenerativeModel({
+    model: MODEL,
+    systemInstruction: ANALYZE_SYSTEM_PROMPT,
+    generationConfig: {
+      maxOutputTokens: MAX_OUTPUT_TOKENS,
+      temperature: 0.3,
+    },
+  });
+
   const prompt = buildAnalyzePrompt({ job, companyInfo, profile, resumeText });
 
   let fullText = "";
+  const result = await model.generateContentStream(prompt);
 
-  const stream = await client.messages.stream({
-    model: MODEL,
-    max_tokens: MAX_TOKENS,
-    system: ANALYZE_SYSTEM_PROMPT,
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  for await (const chunk of stream) {
-    if (
-      chunk.type === "content_block_delta" &&
-      chunk.delta.type === "text_delta"
-    ) {
-      fullText += chunk.delta.text;
-      onToken?.(chunk.delta.text);
+  for await (const chunk of result.stream) {
+    const text = chunk.text();
+    if (text) {
+      fullText += text;
+      onToken?.(text);
     }
   }
 
