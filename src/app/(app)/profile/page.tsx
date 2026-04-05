@@ -134,6 +134,7 @@ export default function ProfilePage() {
   const [targetRoles, setTargetRoles] = useState<string[]>([]);
   const [targetCompanies, setTargetCompanies] = useState<string[]>([]);
   const [industries, setIndustries] = useState<string[]>([]);
+  const [preferredLocations, setPreferredLocations] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -167,6 +168,7 @@ export default function ProfilePage() {
           setTargetRoles(data.targetRoles ?? []);
           setTargetCompanies(data.targetCompanies ?? []);
           setIndustries(data.industries ?? []);
+          setPreferredLocations(data.preferredLocations ?? []);
         }
       })
       .finally(() => setLoading(false));
@@ -184,6 +186,7 @@ export default function ProfilePage() {
           targetRoles,
           targetCompanies,
           industries,
+          preferredLocations,
         }),
       });
       const data = await res.json();
@@ -360,6 +363,22 @@ export default function ProfilePage() {
                 onChange={setIndustries}
                 placeholder="e.g. FinTech, Developer Tools, AI/ML"
               />
+            </Field>
+          </div>
+        </SectionCard>
+
+        {/* Location preferences */}
+        <SectionCard title="Location preferences">
+          <div className="space-y-4">
+            <Field label="Preferred locations" optional>
+              <TagInput
+                value={preferredLocations}
+                onChange={setPreferredLocations}
+                placeholder='e.g. New York, San Francisco, Remote'
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Only jobs in these cities (or remote) will appear in your discovery feed. Leave empty to show all locations.
+              </p>
             </Field>
           </div>
         </SectionCard>

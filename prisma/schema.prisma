@@ -23,9 +23,10 @@ model UserProfile {
   targetCompanies String[]
   minSalary       Int?
   maxSalary       Int?
-  preferRemote    Boolean  @default(true)
-  industries      String[]
-  createdAt       DateTime @default(now())
+  preferRemote        Boolean  @default(true)
+  preferredLocations  String[]
+  industries          String[]
+  createdAt           DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   resumes      Resume[]

@@ -28,6 +28,7 @@ export interface DiscoveredJobRecord {
 interface Props {
   job: DiscoveredJobRecord;
   onDismiss: (id: string) => void;
+  nested?: boolean;
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -68,7 +69,7 @@ function ScoreBadge({ score }: { score: number | null }) {
   );
 }
 
-export function JobCard({ job, onDismiss }: Props) {
+export function JobCard({ job, onDismiss, nested = false }: Props) {
   const router = useRouter();
   const [dismissing, setDismissing] = useState(false);
 
@@ -98,7 +99,7 @@ export function JobCard({ job, onDismiss }: Props) {
   }
 
   return (
-    <div className="group rounded-xl border border-border bg-card p-5 hover:border-border/80 transition-colors">
+    <div className={`group bg-card p-5 hover:bg-white/[0.02] transition-colors ${nested ? "border-0" : "rounded-xl border border-border hover:border-border/80"}`}>
       <div className="flex items-start gap-3">
         {/* Score */}
         <div className="shrink-0 pt-0.5">

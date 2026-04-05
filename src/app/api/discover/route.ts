@@ -6,14 +6,36 @@ import { discoverLeverJobs } from "@/lib/scrapers/lever-discover";
 import { batchScoreJobs } from "@/lib/ai/score-jobs";
 import type { DiscoveredJobInput } from "@/lib/scrapers/yc";
 
+function matchesLocation(
+  job: { location: string | null; remote: boolean | null },
+  preferredLocations: string[]
+): boolean {
+  if (preferredLocations.length === 0) return true;
+  if (job.remote === true) return true;
+  if (job.location === null) return true; // unknown — don't filter out
+  const loc = job.location.toLowerCase();
+  return preferredLocations.some((pref) =>
+    pref.toLowerCase() === "remote"
+      ? job.remote === true
+      : loc.includes(pref.toLowerCase())
+  );
+}
+
 // ── GET: return existing discovered jobs ─────────────────────────────────────
 
 export async function GET() {
   try {
-    const jobs = await prisma.discoveredJob.findMany({
-      where: { dismissed: false },
-      orderBy: [{ relevanceScore: "desc" }, { savedAt: "desc" }],
-    });
+    const [rawJobs, profile] = await Promise.all([
+      prisma.discoveredJob.findMany({
+        where: { dismissed: false },
+        orderBy: [{ relevanceScore: "desc" }, { savedAt: "desc" }],
+      }),
+      prisma.userProfile.findFirst({ select: { preferredLocations: true } }),
+    ]);
+
+    const preferredLocations = profile?.preferredLocations ?? [];
+    const jobs = rawJobs.filter((j) => matchesLocation(j, preferredLocations));
+
     return NextResponse.json({ success: true, data: jobs });
   } catch {
     return NextResponse.json(
@@ -186,11 +208,13 @@ export async function POST() {
 
         const savedCount = saved.filter((r) => r.status === "fulfilled").length;
 
-        // Return full feed sorted by score
-        const allJobs = await prisma.discoveredJob.findMany({
+        // Return full feed sorted by score, filtered by location preference
+        const allRaw = await prisma.discoveredJob.findMany({
           where: { dismissed: false },
           orderBy: [{ relevanceScore: "desc" }, { savedAt: "desc" }],
         });
+        const preferredLocations = profile.preferredLocations ?? [];
+        const allJobs = allRaw.filter((j) => matchesLocation(j, preferredLocations));
 
         send({
           type: "complete",

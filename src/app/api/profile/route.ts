@@ -18,6 +18,7 @@ const profileSchema = z.object({
   minSalary: z.number().int().nonnegative().nullable().optional(),
   maxSalary: z.number().int().nonnegative().nullable().optional(),
   preferRemote: z.boolean().default(true),
+  preferredLocations: z.array(z.string()).default([]),
   industries: z.array(z.string()).default([]),
 });
 

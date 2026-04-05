@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Compass, RefreshCw, Loader2, AlertCircle, Zap } from "lucide-react";
-import { JobCard } from "@/components/discover/JobCard";
+import { CompanyGroup } from "@/components/discover/CompanyGroup";
 import type { DiscoveredJobRecord } from "@/components/discover/JobCard";
 
 type ScanPhase =
@@ -93,6 +93,19 @@ export default function DiscoverPage() {
     if (sourceFilter !== "all" && j.source !== sourceFilter) return false;
     if (minScore > 0 && (j.relevanceScore ?? 0) < minScore) return false;
     return true;
+  });
+
+  // Group by company, sort groups by their best score descending
+  const groupMap = new Map<string, DiscoveredJobRecord[]>();
+  for (const job of filteredJobs) {
+    const key = job.company;
+    if (!groupMap.has(key)) groupMap.set(key, []);
+    groupMap.get(key)!.push(job);
+  }
+  const groups = [...groupMap.entries()].sort(([, a], [, b]) => {
+    const bestA = Math.max(...a.map((j) => j.relevanceScore ?? 0));
+    const bestB = Math.max(...b.map((j) => j.relevanceScore ?? 0));
+    return bestB - bestA;
   });
 
   const isScanning = scan.type === "scanning";
@@ -235,10 +248,15 @@ export default function DiscoverPage() {
             />
           ))}
         </div>
-      ) : filteredJobs.length > 0 ? (
+      ) : groups.length > 0 ? (
         <div className="space-y-3">
-          {filteredJobs.map((job) => (
-            <JobCard key={job.id} job={job} onDismiss={handleDismiss} />
+          {groups.map(([company, companyJobs]) => (
+            <CompanyGroup
+              key={company}
+              company={company}
+              jobs={companyJobs}
+              onDismiss={handleDismiss}
+            />
           ))}
         </div>
       ) : jobs.length === 0 ? (
