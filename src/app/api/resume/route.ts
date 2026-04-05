@@ -27,6 +27,23 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
     const nameOverride = formData.get("name") as string | null;
+    const rawTextOverride = formData.get("rawText") as string | null;
+
+    // ── Text-only save (tailored resume from AI optimization) ──────────────
+    if (!file && rawTextOverride) {
+      const profile = await prisma.userProfile.findFirst();
+      if (!profile) {
+        return NextResponse.json({ success: false, error: "No profile found" }, { status: 400 });
+      }
+      const name = nameOverride?.trim() || "Tailored Resume";
+      const resume = await prisma.resume.create({
+        data: { userId: profile.id, name, rawText: rawTextOverride, isDefault: false },
+      });
+      return NextResponse.json({
+        success: true,
+        data: { id: resume.id, name: resume.name, isDefault: resume.isDefault, charCount: rawTextOverride.length },
+      });
+    }
 
     if (!file) {
       return NextResponse.json(

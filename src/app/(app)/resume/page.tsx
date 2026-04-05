@@ -10,9 +10,11 @@ import {
   Star,
   Trash2,
   CheckCircle2,
+  Sparkles,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
+import { TailorDialog } from "@/components/resume/TailorDialog";
 
 type Resume = {
   id: string;
@@ -142,6 +144,7 @@ function ResumeList({
   onRefresh: () => void;
 }) {
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [tailoring, setTailoring] = useState<Resume | null>(null);
 
   async function setDefault(id: string) {
     setLoadingId(id);
@@ -176,6 +179,14 @@ function ResumeList({
   }
 
   return (
+    <>
+    {tailoring && (
+      <TailorDialog
+        resume={tailoring}
+        onClose={() => setTailoring(null)}
+        onSaved={onRefresh}
+      />
+    )}
     <div className="space-y-2">
       {resumes.map((resume) => (
         <div
@@ -222,6 +233,17 @@ function ResumeList({
 
           {/* Actions */}
           <div className="flex items-center gap-1 shrink-0">
+            {/* Tailor for job */}
+            <button
+              onClick={() => setTailoring(resume)}
+              disabled={loadingId === resume.id}
+              title="Tailor for a job"
+              className="h-8 px-2.5 rounded-lg flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Tailor
+            </button>
+
             {!resume.isDefault && (
               <button
                 onClick={() => setDefault(resume.id)}
@@ -252,6 +274,7 @@ function ResumeList({
         </div>
       ))}
     </div>
+    </>
   );
 }
 
