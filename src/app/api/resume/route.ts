@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { writeFile, mkdir } from "fs/promises";
+import path from "path";
 import { prisma } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
@@ -102,6 +104,7 @@ export async function POST(request: NextRequest) {
     // If no default exists yet, make this one default
     const hasDefault = await prisma.resume.findFirst({ where: { userId: profile.id, isDefault: true } });
 
+    // Create DB record first to get the ID
     const resume = await prisma.resume.create({
       data: {
         userId: profile.id,
@@ -110,6 +113,20 @@ export async function POST(request: NextRequest) {
         isDefault: !hasDefault,
       },
     });
+
+    // Save original PDF file using the record ID as filename
+    try {
+      const uploadDir = path.join(process.cwd(), "public", "resumes");
+      await mkdir(uploadDir, { recursive: true });
+      await writeFile(path.join(uploadDir, `${resume.id}.pdf`), buffer);
+      await prisma.resume.update({
+        where: { id: resume.id },
+        data: { fileUrl: `/resumes/${resume.id}.pdf` },
+      });
+    } catch (fsErr) {
+      // Non-fatal: text extraction succeeded; PDF storage failure is logged but doesn't fail the upload
+      console.error("[resume upload] Failed to save PDF file:", fsErr);
+    }
 
     return NextResponse.json({
       success: true,
