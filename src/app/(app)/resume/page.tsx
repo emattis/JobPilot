@@ -15,6 +15,7 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { TailorDialog } from "@/components/resume/TailorDialog";
+import { ResumePreview } from "@/components/resume/ResumePreview";
 
 type Resume = {
   id: string;
@@ -139,9 +140,13 @@ function UploadZone({ onUploaded }: { onUploaded: () => void }) {
 function ResumeList({
   resumes,
   onRefresh,
+  selectedId,
+  onSelect,
 }: {
   resumes: Resume[];
   onRefresh: () => void;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
 }) {
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [tailoring, setTailoring] = useState<Resume | null>(null);
@@ -191,11 +196,14 @@ function ResumeList({
       {resumes.map((resume) => (
         <div
           key={resume.id}
+          onClick={() => onSelect(resume.id)}
           className={cn(
-            "flex items-center gap-4 rounded-xl border px-4 py-3.5 transition-colors",
-            resume.isDefault
-              ? "border-primary/30 bg-primary/5"
-              : "border-border bg-card"
+            "flex items-center gap-4 rounded-xl border px-4 py-3.5 transition-colors cursor-pointer",
+            selectedId === resume.id
+              ? "border-primary bg-primary/8 ring-1 ring-primary/30"
+              : resume.isDefault
+              ? "border-primary/30 bg-primary/5 hover:border-primary/50"
+              : "border-border bg-card hover:border-border/80 hover:bg-accent/20"
           )}
         >
           {/* Icon */}
@@ -231,8 +239,8 @@ function ResumeList({
             </p>
           </div>
 
-          {/* Actions */}
-          <div className="flex items-center gap-1 shrink-0">
+          {/* Actions — stop propagation so clicks don't open the preview */}
+          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
             {/* Tailor for job */}
             <button
               onClick={() => setTailoring(resume)}
@@ -281,6 +289,7 @@ function ResumeList({
 export default function ResumePage() {
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [loadingList, setLoadingList] = useState(true);
+  const [previewId, setPreviewId] = useState<string | null>(null);
 
   async function fetchResumes() {
     try {
@@ -294,50 +303,72 @@ export default function ResumePage() {
     }
   }
 
-  useEffect(() => {
-    fetchResumes();
-  }, []);
+  useEffect(() => { fetchResumes(); }, []);
+
+  function handleSelect(id: string) {
+    setPreviewId((prev) => (prev === id ? null : id));
+  }
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-8">
-        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-          <FileText className="w-5 h-5 text-primary" />
-        </div>
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">Resume</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Upload and manage your resume versions
-          </p>
+    <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
+      {/* Left: list pane */}
+      <div className={`flex flex-col overflow-y-auto transition-all ${previewId ? "w-[420px] shrink-0 border-r border-border" : "flex-1"}`}>
+        <div className="p-8 max-w-3xl mx-auto w-full">
+          {/* Header */}
+          <div className="flex items-center gap-3 mb-8">
+            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+              <FileText className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight">Resume</h1>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Upload and manage your resume versions
+              </p>
+            </div>
+          </div>
+
+          {/* Upload card */}
+          <div className="rounded-xl border border-border bg-card p-6 mb-6">
+            <h2 className="text-sm font-semibold mb-4">Upload a resume</h2>
+            <UploadZone onUploaded={fetchResumes} />
+          </div>
+
+          {/* Resume list */}
+          {loadingList ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : resumes.length > 0 ? (
+            <div>
+              <h2 className="text-sm font-semibold mb-3">
+                Your resumes
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  ({resumes.length})
+                </span>
+              </h2>
+              <ResumeList
+                resumes={resumes}
+                onRefresh={fetchResumes}
+                selectedId={previewId}
+                onSelect={handleSelect}
+              />
+            </div>
+          ) : (
+            <div className="text-center py-12 text-muted-foreground">
+              <FileText className="w-8 h-8 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">No resumes uploaded yet</p>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Upload card */}
-      <div className="rounded-xl border border-border bg-card p-6 mb-6">
-        <h2 className="text-sm font-semibold mb-4">Upload a resume</h2>
-        <UploadZone onUploaded={fetchResumes} />
-      </div>
-
-      {/* Resume list */}
-      {loadingList ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-        </div>
-      ) : resumes.length > 0 ? (
-        <div>
-          <h2 className="text-sm font-semibold mb-3">
-            Your resumes
-            <span className="ml-2 text-xs font-normal text-muted-foreground">
-              ({resumes.length})
-            </span>
-          </h2>
-          <ResumeList resumes={resumes} onRefresh={fetchResumes} />
-        </div>
-      ) : (
-        <div className="text-center py-12 text-muted-foreground">
-          <FileText className="w-8 h-8 mx-auto mb-3 opacity-30" />
-          <p className="text-sm">No resumes uploaded yet</p>
+      {/* Right: preview pane */}
+      {previewId && (
+        <div className="flex-1 overflow-hidden">
+          <ResumePreview
+            resumeId={previewId}
+            onClose={() => setPreviewId(null)}
+          />
         </div>
       )}
     </div>

@@ -1,17 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const id = request.nextUrl.searchParams.get("id");
+
+    // Single resume with rawText (for preview)
+    if (id) {
+      const resume = await prisma.resume.findUnique({
+        where: { id },
+        select: { id: true, name: true, isDefault: true, createdAt: true, rawText: true, fileUrl: true },
+      });
+      if (!resume) return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
+      return NextResponse.json({ success: true, data: resume });
+    }
+
+    // All resumes (list — no rawText)
     const resumes = await prisma.resume.findMany({
       orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        name: true,
-        isDefault: true,
-        createdAt: true,
-        rawText: false,
-      },
+      select: { id: true, name: true, isDefault: true, createdAt: true },
     });
     return NextResponse.json({ success: true, data: resumes });
   } catch {
