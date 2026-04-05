@@ -155,6 +155,7 @@ model Application {
   updatedAt DateTime @updatedAt
 
   statusHistory StatusChange[]
+  referrals     Referral[]
 }
 
 model StatusChange {
@@ -182,6 +183,37 @@ enum ApplicationStatus {
   REJECTED
   WITHDRAWN
   GHOSTED
+}
+
+model Referral {
+  id             String         @id @default(cuid())
+  applicationId  String
+  application    Application    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  contactName    String
+  contactRole    String?
+  contactCompany String?
+  contactLinkedin String?
+  relationship   String         @db.Text   // how I know them
+  messageTemplate String?       @db.Text   // AI-generated outreach draft
+  messageSentAt  DateTime?
+  responseReceivedAt DateTime?
+  referralMade   Boolean        @default(false)
+  referralDate   DateTime?
+  notes          String?        @db.Text
+  status         ReferralStatus @default(DRAFT)
+
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+}
+
+enum ReferralStatus {
+  DRAFT
+  SENT
+  RESPONDED
+  REFERRED
+  DECLINED
+  NO_RESPONSE
 }
 
 model DiscoveredJob {

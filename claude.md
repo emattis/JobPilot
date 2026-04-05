@@ -487,6 +487,73 @@ All API routes follow this pattern:
 
 ---
 
+## AI Configuration
+
+- **Primary AI**: Google Gemini API (switched from Anthropic due to billing)
+- **Scoring/batch tasks**: `gemini-2.0-flash` (fast, cheap, structured output)
+- **Deep analysis/resume optimization**: `gemini-2.5-pro` (nuanced reasoning)
+- **Temperature**: 0 for all calls (consistency)
+- **JSON parsing**: Always sanitize Gemini responses before parsing — strip markdown code fences (```json / ```), replace unescaped control characters (newlines, tabs) inside string values. Use a shared utility function for this.
+- **Prompt rules**: Never suggest correcting dates or factual details on the candidate's resume. Assume all dates, titles, and facts are accurate. Only suggest changes to wording, emphasis, ordering, and keyword optimization.
+
+---
+
+## Caching System
+
+- When a job URL is scraped, check if a JobPosting with that URL already exists in the database — reuse scraped data instead of re-fetching
+- AI analysis is split into two parts:
+  1. **Company/role analysis** — cached on the JobPosting record (company insights, role requirements, key skills). Only runs once per job
+  2. **Candidate-fit analysis** — runs fresh each time using cached role data against the user's current profile and resume
+- Fields on JobPosting: `roleAnalysisCache String? @db.Text` and `roleAnalysisCachedAt DateTime?`
+- Show a "cached" badge on results when company data was reused
+
+---
+
+## Networking & Referral Tracker
+
+### Prisma Model
+
+```prisma
+model Referral {
+  id                String   @id @default(cuid())
+  applicationId     String
+  application       Application @relation(fields: [applicationId], references: [id])
+  contactName       String
+  contactRole       String?
+  contactCompany    String?
+  contactLinkedin   String?
+  relationship      String   // How you know them
+  messageTemplate   String?  @db.Text  // AI-generated outreach message
+  messageSentAt     DateTime?
+  responseReceivedAt DateTime?
+  referralMade      Boolean  @default(false)
+  referralDate      DateTime?
+  notes             String?  @db.Text
+  status            ReferralStatus @default(DRAFT)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+enum ReferralStatus {
+  DRAFT
+  SENT
+  RESPONDED
+  REFERRED
+  DECLINED
+  NO_RESPONSE
+}
+```
+
+### Features
+- On each application's detail panel in the tracker, add a "Find Warm Intro" section
+- User adds contact name, role, and how they know them
+- Gemini generates a personalized outreach message to copy
+- Track: sent, responded, referral made
+- /networking page accessible from sidebar — shows all outreach across all applications, filterable by status
+- "Needs Follow-up" badge flags contacts where message was sent 5+ days ago with no response
+
+---
+
 ## Non-Obvious Features to Include
 
 These are things you'd want in practice that might not be immediately obvious:
@@ -501,6 +568,62 @@ These are things you'd want in practice that might not be immediately obvious:
 8. **Export** — Export application history to CSV for record-keeping
 9. **Browser extension consideration** — Note: a future Chrome extension could add "Analyze with JobPilot" to any job posting page. Design the analyze API to support this
 10. **ATS keyword checker** — Compare resume keywords against job posting keywords, show overlap percentage
+
+---
+
+## Advanced Features (Phase 8+)
+
+### Opportunity Identification
+11. **Company watchlist** — Add specific target companies. A daily cron job monitors their career pages (Greenhouse/Lever boards) and alerts you when a new role matching your profile appears. Fully agentic — no manual scanning needed.
+12. **Network-sourced leads** — Cross-reference contacts in the Referral table with their companies and open roles. Surface suggestions like "Your contact Sarah is at Stripe — they have 3 open roles matching your profile."
+13. **Salary benchmarking** — Before applying, surface salary data from Levels.fyi or Glassdoor for the role and company to assess if it's worth pursuing.
+
+### Deeper Analysis
+14. **Red flag detector** — Beyond fit scoring, explicitly flag warning signs: vague job descriptions, unrealistic requirements (e.g., "10 years experience in a 3-year-old technology"), high Glassdoor turnover, recent layoffs, roles open for months (problematic team or unrealistic hiring bar).
+15. **Day-in-the-life simulator** — Given the job description, AI describes what a typical week in this role probably looks like so you can gut-check whether you'd enjoy the work.
+16. **Team research** — Research the likely team via LinkedIn: hiring manager's background, team composition, tenure. Helps assess culture fit beyond the posting.
+17. **Competitive positioning** — For any job, AI estimates how competitive you are relative to the likely applicant pool. Not just "are you a fit" but "can you win" — e.g., "This Anthropic role will attract ML engineers with PhDs — your operational AI experience is differentiated but emphasize X to stand out."
+
+### Application Optimization
+18. **Cover letter generator** — Given the job, resume, and company analysis, generate a tailored cover letter hitting the specific points the role cares about. Job-specific, not generic.
+19. **Application question answerer** — Many applications have free-text questions ("Why do you want to work here?", "Describe a time you..."). Paste the questions and AI drafts answers pulling from your experience.
+20. **Portfolio piece recommender** — If you have projects, writing, or work samples, AI suggests which to include or highlight for each specific application.
+21. **"Why me" statement generator** — For each application, generate a 2-3 sentence pitch answering "why are you uniquely suited for this role" by connecting your specific experiences to their specific needs. Useful for cover letters, networking messages, and the first 30 seconds of any interview.
+
+### Networking Intelligence
+22. **LinkedIn connection mapper** — Upload your LinkedIn connections CSV. The app cross-references your network against companies you're applying to. Instead of manually thinking "who do I know at Anthropic?", the app tells you.
+23. **Multi-hop intros** — "You don't know anyone at Stripe, but your contact James at Notion previously worked there and likely knows people on this team."
+24. **Referral email sequences** — Not just one message. Generate a sequence: casual reconnect → the ask → follow-up if no response. Each timed appropriately.
+25. **Outreach timing intelligence** — Track when networking messages get responses. Learn patterns — "Messages sent Tuesday-Thursday mornings get 2x more responses than Friday afternoons."
+
+### Monitoring & Follow-ups
+26. **Auto follow-up drafter** — When an application hits 7 days with no response, auto-generate a follow-up email to review and send. Different tone at 14 days.
+27. **Recruiter response parser** — Paste a recruiter's email and AI interprets it: soft rejection, scheduling request, request for more info? Then suggests your reply.
+28. **Calendar integration** — When moving to "Phone Interview" or "Onsite", prompt to add to calendar with prep reminders set 24 hours before.
+
+### Interview Preparation
+29. **Company deep dive** — Auto-generate a research brief: recent news, funding rounds, product launches, competitors, challenges. Everything you'd want to know walking in.
+30. **Question bank** — Based on role type, generate likely interview questions (behavioral, technical, case study) with suggested answer frameworks using your actual experience.
+31. **Mock interview** — Interactive chat mode where AI plays the interviewer. Asks questions, you respond, it gives feedback on what was strong and what to tighten.
+32. **STAR story builder** — Feed in your experiences and AI structures 8-10 polished STAR stories mapped to common competencies (leadership, conflict resolution, technical problem-solving). For each interview, tells you which stories to have ready based on the role.
+33. **Hiring manager research brief** — When you know the interviewer (from recruiter email or LinkedIn), research their background, recent posts, interests. Generate talking points and rapport-builders.
+
+### Offer & Negotiation
+34. **Offer comparison tool** — Multiple offers? Structured side-by-side comparison across compensation, role scope, growth potential, culture, location, and your personal priorities.
+35. **Salary negotiation prep** — At offer stage, generate a negotiation strategy: market data, your leverage points, counter-offer scripts, what to ask for beyond base salary.
+36. **Negotiation tracker** — Log each back-and-forth of the negotiation with AI suggesting next moves.
+
+### Analytics & Learning
+37. **Application timing optimizer** — Track when jobs were posted and flag urgency. Roles posted today get "Apply within 48 hours" badges. Track your own data: "You get 3x more responses when you apply within the first 3 days."
+38. **Rejection learning loop** — When marked rejected, tag the stage and any feedback. Over time builds pattern analysis: "You're getting rejected at technical interview 60% of the time — here are common skills in those roles to sharpen."
+39. **Skills investment roadmap** — Across all analyzed jobs, priority-rank skills to develop. "Kubernetes appeared in 34 of 50 roles, Python in 48 of 50 — adding Kubernetes unlocks 68% more target roles." Pairs each with suggested resources and estimated time to become competitive.
+40. **Weekly momentum report** — Every Sunday evening, AI-generated summary: apps sent this week vs target, response rate trends, upcoming interviews, follow-ups due, and one strategic recommendation.
+
+### Agentic Automation (Runs Without You)
+- **Daily job discovery scan** — Cron scrapes watchlist companies and job boards, scores new postings, surfaces only 80%+ matches. You open the app and see what's new.
+- **Follow-up monitoring** — Daily check for stale applications (no status change in X days), auto-drafts follow-up emails, queues them for your review. You approve and send.
+- **Company watchlist alerts** — When a watchlist company posts a new role, the app scrapes it, analyzes fit, and if above threshold, pre-generates tailored resume and cover letter so you can apply immediately.
+- **Principle**: The agent does research, drafting, and monitoring. You make decisions and hit send.
 
 ---
 

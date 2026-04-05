@@ -12,6 +12,7 @@ import {
   UserCircle,
   LogOut,
   Briefcase,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +23,7 @@ const navItems = [
   { href: "/tracker", label: "Tracker", icon: KanbanSquare },
   { href: "/resume", label: "Resume", icon: FileText },
   { href: "/metrics", label: "Metrics", icon: BarChart2 },
+  { href: "/networking", label: "Networking", icon: Users },
 ];
 
 export function Sidebar() {

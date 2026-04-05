@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import type { TrackerApplication, AppStatus } from "@/types/tracker";
 import { COLUMN_BY_STATUS, COLUMNS } from "./constants";
+import { ReferralSection } from "./ReferralSection";
 
 function fitScoreClass(score: number) {
   if (score >= 80) return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
@@ -162,6 +163,15 @@ export function DetailPanel({
               className="text-sm resize-none"
             />
           </div>
+
+          <Separator />
+
+          {/* Warm Intros / Referrals */}
+          <ReferralSection
+            applicationId={app.id}
+            jobTitle={app.job.title}
+            jobCompany={app.job.company}
+          />
 
           <Separator />
 
