@@ -115,51 +115,71 @@ async function scrapeGreenhouse(url: string): Promise<ScrapedJob> {
 
 // ── Lever ─────────────────────────────────────────────────────────────────────
 async function scrapeLever(url: string): Promise<ScrapedJob> {
-  // Try the JSON API first
-  const apiUrl = url.replace(/\?.*$/, "") + "?format=json";
-  const res = await fetch(apiUrl, {
-    headers: { "User-Agent": USER_AGENT },
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  });
+  // jobs.lever.co/{company}/{id} → api.lever.co/v0/postings/{company}/{id}
+  const match = url.match(/jobs\.lever\.co\/([^/]+)\/([^/?#]+)/);
 
-  if (res.ok) {
-    const data = await res.json() as {
-      text?: string;
-      categories?: { location?: string; team?: string };
-      content?: string;
-      lists?: Array<{ text: string; content: string }>;
-      additional?: string;
-    };
+  if (match) {
+    const apiUrl = `https://api.lever.co/v0/postings/${match[1]}/${match[2]}`;
+    try {
+      const res = await fetch(apiUrl, {
+        headers: { "User-Agent": USER_AGENT },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
 
-    const description = htmlToText(
-      [data.content ?? "", ...(data.lists ?? []).map((l) => l.content), data.additional ?? ""].join("\n")
-    );
+      if (res.ok && (res.headers.get("content-type") ?? "").includes("application/json")) {
+        const data = await res.json() as {
+          text?: string;
+          categories?: { location?: string; team?: string; allLocations?: string[] };
+          descriptionPlain?: string;
+          descriptionBody?: string;
+          description?: string;
+          lists?: Array<{ text: string; content: string }>;
+          additional?: string;
+          additionalPlain?: string;
+          workplaceType?: string; // "remote" | "onsite" | "hybrid"
+        };
 
-    const requirementsList = data.lists?.find((l) =>
-      /requirement|qualification/i.test(l.text)
-    );
-    const niceToHavesList = data.lists?.find((l) =>
-      /nice.to.have|bonus|preferred/i.test(l.text)
-    );
+        // Prefer plain-text fields; fall back to stripping HTML from body
+        const descParts = [
+          data.descriptionPlain ?? (data.descriptionBody ? htmlToText(data.descriptionBody) : "") ?? "",
+          ...(data.lists ?? []).map((l) => l.text + ": " + htmlToText(l.content)),
+          data.additionalPlain ?? data.additional ?? "",
+        ].filter(Boolean);
+        const description = descParts.join("\n\n");
 
-    const salary = extractSalary(description);
-    const company = url.split("/")[3] ?? "";
+        const requirementsList = data.lists?.find((l) =>
+          /requirement|qualification/i.test(l.text)
+        );
+        const niceToHavesList = data.lists?.find((l) =>
+          /nice.to.have|bonus|preferred/i.test(l.text)
+        );
 
-    return {
-      title: data.text ?? "",
-      company,
-      location: data.categories?.location ?? null,
-      description,
-      requirements: requirementsList ? htmlToText(requirementsList.content) : null,
-      niceToHaves: niceToHavesList ? htmlToText(niceToHavesList.content) : null,
-      skills: extractSkills(description),
-      experienceLevel: detectExperienceLevel((data.text ?? "") + " " + description),
-      salaryMin: salary.min,
-      salaryMax: salary.max,
-      remote: detectRemote((data.categories?.location ?? "") + " " + description),
-      postedAt: null,
-      source: "lever",
-    };
+        const salary = extractSalary(description);
+        const isRemote = data.workplaceType === "remote"
+          ? true
+          : data.workplaceType === "onsite"
+          ? false
+          : detectRemote((data.categories?.location ?? "") + " " + description);
+
+        return {
+          title: data.text ?? "",
+          company: match[1],
+          location: data.categories?.location ?? null,
+          description,
+          requirements: requirementsList ? htmlToText(requirementsList.content) : null,
+          niceToHaves: niceToHavesList ? htmlToText(niceToHavesList.content) : null,
+          skills: extractSkills(description),
+          experienceLevel: detectExperienceLevel((data.text ?? "") + " " + description),
+          salaryMin: salary.min,
+          salaryMax: salary.max,
+          remote: isRemote,
+          postedAt: null,
+          source: "lever",
+        };
+      }
+    } catch {
+      // API unavailable — fall through to HTML scrape
+    }
   }
 
   // Fall back to HTML scraping
