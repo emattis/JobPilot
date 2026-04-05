@@ -1,36 +1,105 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# JobPilot
+
+An AI-powered job search command center. Analyze job postings against your background, score fit, optimize your resume, discover relevant jobs, and track every application.
+
+## Stack
+
+- **Next.js 16** (App Router, TypeScript)
+- **Tailwind CSS** + **shadcn/ui**
+- **Prisma 5** + **PostgreSQL** (Neon)
+- **Anthropic Claude API** for all AI analysis
+- **pdf-parse** for resume text extraction
 
 ## Getting Started
 
-First, run the development server:
+### 1. Install dependencies
+
+```bash
+npm install
+```
+
+### 2. Configure environment variables
+
+Copy `.env.example` to `.env` (or create `.env`) and fill in:
+
+```env
+APP_PASSWORD=your-secure-password
+SESSION_SECRET=random-32-char-string
+
+DATABASE_URL=postgresql://user:pass@host:5432/jobpilot?sslmode=require
+
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+### 3. Run database migrations
+
+```bash
+npm run db:migrate -- --name init
+```
+
+### 4. Start the dev server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) and sign in with your `APP_PASSWORD`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Features
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Phase | Status | Description |
+|-------|--------|-------------|
+| Foundation | ✅ Done | Auth gate, layout, sidebar navigation |
+| Profile | ✅ Done | User profile with skills, preferences, target roles |
+| Resume | ✅ Done | PDF upload, text extraction, version management |
+| Job Analysis | 🔜 Next | Paste a URL → AI fit score, skill gap, resume tips |
+| Job Discovery | 🔜 Planned | Scraped job feed ranked by AI relevance |
+| App Tracker | 🔜 Planned | Kanban pipeline, status history, follow-up reminders |
+| Resume Optimizer | 🔜 Planned | AI-tailored resume with diff view |
+| Metrics | 🔜 Planned | Funnel charts, response rates, skill gap analysis |
 
-## Learn More
+## Project Structure
 
-To learn more about Next.js, take a look at the following resources:
+```
+src/
+├── app/
+│   ├── (app)/             # Auth-protected app shell (sidebar layout)
+│   │   ├── page.tsx       # Dashboard
+│   │   ├── analyze/       # Job analysis
+│   │   ├── discover/      # Job discovery feed
+│   │   ├── tracker/       # Application tracker
+│   │   ├── resume/        # Resume manager
+│   │   ├── metrics/       # Analytics
+│   │   └── profile/       # User profile
+│   ├── login/             # Password login
+│   └── api/               # API routes
+├── components/
+│   ├── layout/            # Sidebar, nav
+│   └── ui/                # shadcn/ui primitives
+├── lib/
+│   ├── db.ts              # Prisma client singleton
+│   └── auth.ts            # Session helpers
+└── middleware.ts           # Auth gate
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Useful Scripts
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run dev          # Start dev server
+npm run build        # Production build (runs migrations)
+npm run db:migrate   # Run Prisma migrations
+npm run db:studio    # Open Prisma Studio
+npm run db:generate  # Regenerate Prisma client
+```
 
-## Deploy on Vercel
+## Deployment
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Railway (recommended)
+1. Add a PostgreSQL plugin
+2. Set env vars in the Railway dashboard
+3. Deploy — `postbuild` runs `prisma migrate deploy` automatically
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Vercel
+1. Use Neon or Supabase for PostgreSQL
+2. Set env vars in the Vercel dashboard
+3. Note: use cheerio-only scraping (no Puppeteer in serverless)
