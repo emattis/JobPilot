@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { Zap, Loader2, AlertCircle, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { AnalysisResults } from "@/components/analyze/AnalysisResults";
@@ -21,7 +22,9 @@ type Phase =
   | { type: "error"; error: string; allowManual: boolean };
 
 export default function AnalyzePage() {
-  const [jobUrl, setJobUrl] = useState("");
+  const searchParams = useSearchParams();
+  const autoRunRef = useRef(false);
+  const [jobUrl, setJobUrl] = useState(() => searchParams.get("url") ?? "");
   const [companyUrl, setCompanyUrl] = useState("");
   const [showCompany, setShowCompany] = useState(false);
   const [showManual, setShowManual] = useState(false);
@@ -32,6 +35,17 @@ export default function AnalyzePage() {
     description: "",
   });
   const [phase, setPhase] = useState<Phase>({ type: "idle" });
+
+  // Auto-run analysis if URL was passed as query param (from discover page)
+  useEffect(() => {
+    const urlParam = searchParams.get("url");
+    if (urlParam && !autoRunRef.current) {
+      autoRunRef.current = true;
+      // Small delay to let state settle
+      setTimeout(() => runAnalysis(false), 100);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function runAnalysis(useManual = false) {
     const urlToUse = jobUrl.trim();

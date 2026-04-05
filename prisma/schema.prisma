@@ -188,6 +188,8 @@ model DiscoveredJob {
   url            String   @unique
   title          String
   company        String
+  location       String?
+  remote         Boolean?
   source         String
   relevanceScore Int?
   reasoning      String?  @db.Text
