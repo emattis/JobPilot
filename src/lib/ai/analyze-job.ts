@@ -40,7 +40,7 @@ async function runGemini(
     systemInstruction,
     generationConfig: {
       maxOutputTokens: MAX_OUTPUT_TOKENS,
-      temperature: 0.3,
+      temperature: 0,
     },
   });
 

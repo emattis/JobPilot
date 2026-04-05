@@ -59,7 +59,7 @@ async function scoreBatch(
   const client = getGeminiClient();
   const model = client.getGenerativeModel({
     model: MODEL,
-    generationConfig: { maxOutputTokens: 2048, temperature: 0.1 },
+    generationConfig: { maxOutputTokens: 2048, temperature: 0 },
   });
 
   const prompt = buildScoringPrompt(jobs, profile);
