@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Compass, RefreshCw, Loader2, AlertCircle, Zap, Bookmark } from "lucide-react";
+import { Compass, RefreshCw, Loader2, AlertCircle, Zap } from "lucide-react";
 import { CompanyGroup } from "@/components/discover/CompanyGroup";
 import type { DiscoveredJobRecord } from "@/components/discover/JobCard";
 
@@ -24,17 +24,12 @@ export default function DiscoverPage() {
   const [scan, setScan] = useState<ScanPhase>({ type: "idle" });
   const [sourceFilter, setSourceFilter] = useState("all");
   const [minScore, setMinScore] = useState(80);
-  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
-  const [showSavedOnly, setShowSavedOnly] = useState(false);
 
   const loadJobs = useCallback(async () => {
     try {
       const res = await fetch("/api/discover");
       const data = await res.json();
-      if (data.success) {
-        setJobs(data.data);
-        if (data.savedIds) setSavedIds(new Set(data.savedIds));
-      }
+      if (data.success) setJobs(data.data);
     } finally {
       setLoading(false);
     }
@@ -95,13 +90,12 @@ export default function DiscoverPage() {
   }
 
   function handleSave(id: string) {
-    setSavedIds((prev) => new Set(prev).add(id));
+    setJobs((prev) => prev.filter((j) => j.id !== id));
   }
 
   const filteredJobs = jobs.filter((j) => {
     if (sourceFilter !== "all" && j.source !== sourceFilter) return false;
     if (minScore > 0 && (j.relevanceScore ?? 0) < minScore) return false;
-    if (showSavedOnly && !savedIds.has(j.id)) return false;
     return true;
   });
 
@@ -229,18 +223,6 @@ export default function DiscoverPage() {
                 {opt.label}
               </button>
             ))}
-            <div className="w-px h-5 bg-border mx-1" />
-            <button
-              onClick={() => setShowSavedOnly((v) => !v)}
-              className={`inline-flex items-center gap-1.5 h-7 px-3 rounded-md text-xs font-medium border transition-colors ${
-                showSavedOnly
-                  ? "bg-green-500/10 border-green-500/30 text-green-400"
-                  : "border-border text-muted-foreground hover:text-foreground hover:bg-white/5"
-              }`}
-            >
-              <Bookmark className="w-3 h-3" />
-              Saved{savedIds.size > 0 ? ` (${savedIds.size})` : ""}
-            </button>
           </div>
 
           <div className="flex items-center gap-2 ml-auto">
@@ -280,7 +262,6 @@ export default function DiscoverPage() {
               jobs={companyJobs}
               onDismiss={handleDismiss}
               onSave={handleSave}
-              savedIds={savedIds}
             />
           ))}
         </div>

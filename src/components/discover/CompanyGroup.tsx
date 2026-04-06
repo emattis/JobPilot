@@ -10,7 +10,6 @@ interface Props {
   jobs: DiscoveredJobRecord[];
   onDismiss: (id: string) => void;
   onSave?: (id: string) => void;
-  savedIds?: Set<string>;
 }
 
 function scoreBadgeColor(score: number) {
@@ -20,7 +19,7 @@ function scoreBadgeColor(score: number) {
   return "bg-red-500/15 text-red-400 border-red-500/20";
 }
 
-export function CompanyGroup({ company, jobs, onDismiss, onSave, savedIds }: Props) {
+export function CompanyGroup({ company, jobs, onDismiss, onSave }: Props) {
   const [open, setOpen] = useState(false);
 
   // Show best score in header
@@ -64,7 +63,7 @@ export function CompanyGroup({ company, jobs, onDismiss, onSave, savedIds }: Pro
       {open && (
         <div className="border-t border-border divide-y divide-border/40">
           {visibleJobs.map((job) => (
-            <JobCard key={job.id} job={job} onDismiss={onDismiss} onSave={onSave} isSaved={savedIds?.has(job.id)} nested />
+            <JobCard key={job.id} job={job} onDismiss={onDismiss} onSave={onSave} nested />
           ))}
         </div>
       )}

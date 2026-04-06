@@ -11,7 +11,6 @@ import {
   Wifi,
   ExternalLink,
   Bookmark,
-  Check,
 } from "lucide-react";
 
 export interface DiscoveredJobRecord {
@@ -31,7 +30,6 @@ interface Props {
   job: DiscoveredJobRecord;
   onDismiss: (id: string) => void;
   onSave?: (id: string) => void;
-  isSaved?: boolean;
   nested?: boolean;
 }
 
@@ -73,7 +71,7 @@ function ScoreBadge({ score }: { score: number | null }) {
   );
 }
 
-export function JobCard({ job, onDismiss, onSave, isSaved = false, nested = false }: Props) {
+export function JobCard({ job, onDismiss, onSave, nested = false }: Props) {
   const router = useRouter();
   const [dismissing, setDismissing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -194,24 +192,14 @@ export function JobCard({ job, onDismiss, onSave, isSaved = false, nested = fals
               <Zap className="w-3 h-3" />
               Analyze
             </button>
-            {isSaved ? (
-              <button
-                disabled
-                className="inline-flex items-center gap-1.5 h-7 px-3 rounded-md border border-green-500/30 text-xs font-medium text-green-400 bg-green-500/10 cursor-default"
-              >
-                <Check className="w-3 h-3" />
-                Saved
-              </button>
-            ) : (
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="inline-flex items-center gap-1.5 h-7 px-3 rounded-md border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors disabled:opacity-40"
-              >
-                <Bookmark className="w-3 h-3" />
-                {saving ? "Saving…" : "Save to Tracker"}
-              </button>
-            )}
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 h-7 px-3 rounded-md border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors disabled:opacity-40"
+            >
+              <Bookmark className="w-3 h-3" />
+              {saving ? "Saving…" : "Save to Tracker"}
+            </button>
             <button
               onClick={handleDismiss}
               disabled={dismissing}
