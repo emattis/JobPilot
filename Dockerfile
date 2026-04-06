@@ -13,7 +13,7 @@ COPY . .
 # Generate Prisma client
 RUN npx prisma generate
 
-# Build Next.js
+# Build Next.js (standalone output)
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
@@ -28,15 +28,20 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-# Copy built assets
+# Copy built standalone app
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
-# Copy Prisma files for migrations
+# Copy Prisma schema + migrations + engine for migrate deploy
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+
+# Copy entrypoint script
+COPY --from=builder /app/docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x docker-entrypoint.sh
 
 USER nextjs
 
@@ -44,4 +49,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node server.js"]
+CMD ["./docker-entrypoint.sh"]
