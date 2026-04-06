@@ -1,16 +1,40 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { LayoutGrid, List, Plus, Upload } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { KanbanBoard } from "@/components/tracker/KanbanBoard";
 import { TableView } from "@/components/tracker/TableView";
 import { DetailPanel } from "@/components/tracker/DetailPanel";
 import { ImportDialog } from "@/components/tracker/ImportDialog";
 import { AddApplicationDialog } from "@/components/tracker/AddApplicationDialog";
+import {
+  TrackerFilters,
+  DEFAULT_FILTERS,
+  filtersAreDefault,
+  type FilterState,
+  type SortField,
+} from "@/components/tracker/TrackerFilters";
+import { ALL_STATUSES } from "@/components/tracker/constants";
 import type { TrackerApplication, AppStatus } from "@/types/tracker";
 
 type View = "board" | "table";
+
+function getDaysInStage(app: TrackerApplication): number {
+  const history = app.statusHistory;
+  if (history.length > 0) {
+    const last = history[history.length - 1];
+    return Math.floor(
+      (Date.now() - new Date(last.changedAt).getTime()) / 86_400_000
+    );
+  }
+  return Math.floor(
+    (Date.now() - new Date(app.createdAt).getTime()) / 86_400_000
+  );
+}
+
+function getFitScore(app: TrackerApplication): number | null {
+  return app.job.analyses[0]?.overallFitScore ?? null;
+}
 
 export default function TrackerPage() {
   const [view, setView] = useState<View>("board");
@@ -19,6 +43,7 @@ export default function TrackerPage() {
   const [selected, setSelected] = useState<TrackerApplication | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [showAddApp, setShowAddApp] = useState(false);
+  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
 
   // ── Fetch ────────────────────────────────────────────────────────────────────
   const fetchApps = useCallback(async () => {
@@ -51,13 +76,11 @@ export default function TrackerPage() {
     });
     const json = await res.json();
     if (json.success) {
-      // Refetch to get fresh statusHistory
       await fetchApps();
     }
   }
 
   const handleStatusChange = useCallback(async (id: string, status: AppStatus) => {
-    // Optimistic update
     setApplications((prev) =>
       prev.map((a) => (a.id === id ? { ...a, status } : a))
     );
@@ -80,7 +103,95 @@ export default function TrackerPage() {
     await fetch(`/api/applications?id=${id}`, { method: "DELETE" });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Stats ────────────────────────────────────────────────────────────────────
+  // ── Derived data ────────────────────────────────────────────────────────────
+  const availableSources = useMemo(() => {
+    const set = new Set(applications.map((a) => a.job.source));
+    return [...set].sort();
+  }, [applications]);
+
+  // ── Filtering ───────────────────────────────────────────────────────────────
+  const filtered = useMemo(() => {
+    const q = filters.search.toLowerCase().trim();
+
+    let result = applications.filter((app) => {
+      // Text search
+      if (q) {
+        const haystack = [
+          app.job.company,
+          app.job.title,
+          app.notes ?? "",
+        ]
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+
+      // Status
+      if (
+        filters.statuses.length > 0 &&
+        !filters.statuses.includes(app.status)
+      )
+        return false;
+
+      // Source
+      if (
+        filters.sources.length > 0 &&
+        !filters.sources.includes(app.job.source)
+      )
+        return false;
+
+      // Date range
+      if (filters.dateFrom) {
+        const from = new Date(filters.dateFrom);
+        if (new Date(app.createdAt) < from) return false;
+      }
+      if (filters.dateTo) {
+        const to = new Date(filters.dateTo);
+        to.setHours(23, 59, 59, 999);
+        if (new Date(app.createdAt) > to) return false;
+      }
+
+      // Fit score
+      if (filters.minFit > 0) {
+        const score = getFitScore(app);
+        if (score === null || score < filters.minFit) return false;
+      }
+
+      return true;
+    });
+
+    // Sort
+    const dir = filters.sortDir === "asc" ? 1 : -1;
+    result.sort((a, b) => {
+      switch (filters.sortBy) {
+        case "company":
+          return dir * a.job.company.localeCompare(b.job.company);
+        case "status": {
+          const ai = ALL_STATUSES.indexOf(a.status);
+          const bi = ALL_STATUSES.indexOf(b.status);
+          return dir * (ai - bi);
+        }
+        case "fitScore": {
+          const as = getFitScore(a) ?? -1;
+          const bs = getFitScore(b) ?? -1;
+          return dir * (as - bs);
+        }
+        case "daysInStage":
+          return dir * (getDaysInStage(a) - getDaysInStage(b));
+        case "createdAt":
+        default:
+          return (
+            dir *
+            (new Date(a.createdAt).getTime() -
+              new Date(b.createdAt).getTime())
+          );
+      }
+    });
+
+    return result;
+  }, [applications, filters]);
+
+  // ── Stats (on all applications, not filtered) ───────────────────────────────
   const stats = {
     total: applications.length,
     active: applications.filter((a) => !["REJECTED", "WITHDRAWN", "GHOSTED", "ACCEPTED"].includes(a.status)).length,
@@ -104,7 +215,6 @@ export default function TrackerPage() {
               <p className="text-sm text-muted-foreground mt-0.5">Track every application through your pipeline</p>
             </div>
             <div className="flex items-center gap-2">
-              {/* Add buttons */}
               <button
                 onClick={() => setShowAddApp(true)}
                 className="flex items-center gap-1.5 h-8 px-3 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
@@ -119,7 +229,6 @@ export default function TrackerPage() {
                 <Upload className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Import</span>
               </button>
-              {/* View toggle */}
               <div className="flex rounded-md border border-border overflow-hidden">
                 <button
                   onClick={() => setView("board")}
@@ -144,7 +253,7 @@ export default function TrackerPage() {
           </div>
 
           {/* Quick stats */}
-          <div className="flex flex-wrap gap-4 md:gap-6 text-sm">
+          <div className="flex flex-wrap gap-4 md:gap-6 text-sm mb-4">
             {[
               { label: "Total", value: stats.total },
               { label: "Active", value: stats.active, color: "text-sky-400" },
@@ -157,6 +266,15 @@ export default function TrackerPage() {
               </div>
             ))}
           </div>
+
+          {/* Filters */}
+          <TrackerFilters
+            filters={filters}
+            onChange={setFilters}
+            availableSources={availableSources}
+            filteredCount={filtered.length}
+            totalCount={applications.length}
+          />
         </div>
 
         {/* Content */}
@@ -174,14 +292,14 @@ export default function TrackerPage() {
           ) : view === "board" ? (
             <div className="p-4 pt-3">
               <KanbanBoard
-                applications={applications}
+                applications={filtered}
                 onStatusChange={handleStatusChange}
                 onSelect={setSelected}
               />
             </div>
           ) : (
             <TableView
-              applications={applications}
+              applications={filtered}
               onSelect={setSelected}
             />
           )}
