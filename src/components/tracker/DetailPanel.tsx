@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { format, parseISO } from "date-fns";
-import { X, ExternalLink, ChevronDown } from "lucide-react";
+import { X, ExternalLink, ChevronDown, Check, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import type { TrackerApplication, AppStatus } from "@/types/tracker";
 import { COLUMN_BY_STATUS, COLUMNS } from "./constants";
 import { ReferralSection } from "./ReferralSection";
+import { AnalyzeSection } from "./AnalyzeSection";
 
 function fitScoreClass(score: number) {
   if (score >= 80) return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
@@ -23,6 +25,7 @@ interface DetailPanelProps {
   onStatusChange: (id: string, status: AppStatus) => Promise<void>;
   onNotesChange: (id: string, notes: string) => Promise<void>;
   onFollowUpChange: (id: string, date: string) => Promise<void>;
+  onRefresh: () => void;
 }
 
 export function DetailPanel({
@@ -31,6 +34,7 @@ export function DetailPanel({
   onStatusChange,
   onNotesChange,
   onFollowUpChange,
+  onRefresh,
 }: DetailPanelProps) {
   const [notes, setNotes] = useState(app.notes ?? "");
   const [followUp, setFollowUp] = useState(
@@ -38,12 +42,17 @@ export function DetailPanel({
   );
   const [savingNotes, setSavingNotes] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
+  const isManualUrl = !app.job.url || app.job.url.startsWith("manual://");
+  const [jobUrl, setJobUrl] = useState(isManualUrl ? "" : app.job.url);
+  const [savingUrl, setSavingUrl] = useState(false);
 
   // Sync when app changes
   useEffect(() => {
     setNotes(app.notes ?? "");
     setFollowUp(app.followUpDate ? format(parseISO(app.followUpDate), "yyyy-MM-dd") : "");
-  }, [app.id, app.notes, app.followUpDate]);
+    const manual = !app.job.url || app.job.url.startsWith("manual://");
+    setJobUrl(manual ? "" : app.job.url);
+  }, [app.id, app.notes, app.followUpDate, app.job.url]);
 
   const col = COLUMN_BY_STATUS[app.status];
   const analysis = app.job.analyses[0];
@@ -58,6 +67,33 @@ export function DetailPanel({
   async function handleFollowUpBlur() {
     if (followUp === (app.followUpDate ? format(parseISO(app.followUpDate), "yyyy-MM-dd") : "")) return;
     await onFollowUpChange(app.id, followUp);
+  }
+
+  async function handleSaveUrl() {
+    const trimmed = jobUrl.trim();
+    if (!trimmed) return;
+    try {
+      new URL(trimmed); // validate
+    } catch {
+      toast.error("Enter a valid URL");
+      return;
+    }
+    setSavingUrl(true);
+    try {
+      const res = await fetch("/api/jobs", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: app.job.id, url: trimmed }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+      toast.success("Job URL saved");
+      onRefresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save URL");
+    } finally {
+      setSavingUrl(false);
+    }
   }
 
   async function handleStatusChange(e: React.ChangeEvent<HTMLSelectElement>) {
@@ -100,15 +136,62 @@ export function DetailPanel({
                 Recommended
               </Badge>
             )}
-            <a
-              href={app.job.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
-            >
-              View posting <ExternalLink className="w-3 h-3" />
-            </a>
+            {!isManualUrl && (
+              <a
+                href={app.job.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+              >
+                View posting <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
           </div>
+
+          {/* Job URL */}
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-2">
+              Job URL
+            </label>
+            <div className="flex gap-1.5">
+              <input
+                type="url"
+                value={jobUrl}
+                onChange={(e) => setJobUrl(e.target.value)}
+                placeholder="https://jobs.lever.co/company/job-id"
+                className="flex-1 h-8 rounded-md border border-input bg-background px-2.5 text-xs placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+              {jobUrl.trim() && jobUrl !== (isManualUrl ? "" : app.job.url) && (
+                <button
+                  onClick={handleSaveUrl}
+                  disabled={savingUrl}
+                  className="h-8 px-2.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-1"
+                >
+                  {savingUrl ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                  Save
+                </button>
+              )}
+              {!isManualUrl && (
+                <a
+                  href={app.job.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="h-8 px-2 rounded-md border border-border flex items-center text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </div>
+          </div>
+
+          {/* AI Analysis */}
+          <AnalyzeSection
+            jobUrl={app.job.url}
+            jobTitle={app.job.title}
+            jobCompany={app.job.company}
+            hasAnalysis={!!analysis}
+            onAnalysisComplete={onRefresh}
+          />
 
           <Separator />
 

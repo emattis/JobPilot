@@ -205,6 +205,7 @@ export default function TrackerPage() {
             onStatusChange={handleStatusChange}
             onNotesChange={handleNotesChange}
             onFollowUpChange={handleFollowUpChange}
+            onRefresh={fetchApps}
           />
         </div>
       )}
