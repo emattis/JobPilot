@@ -13,6 +13,7 @@ import {
   LogOut,
   Briefcase,
   Users,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -25,6 +26,7 @@ const navItems = [
   { href: "/resume", label: "Resume", icon: FileText },
   { href: "/metrics", label: "Metrics", icon: BarChart2 },
   { href: "/networking", label: "Networking", icon: Users },
+  { href: "/story", label: "My Story", icon: BookOpen },
 ];
 
 export function Sidebar() {

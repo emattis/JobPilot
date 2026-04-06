@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { format, parseISO } from "date-fns";
-import { X, ExternalLink, ChevronDown, Check, Loader2 } from "lucide-react";
+import { X, ExternalLink, ChevronDown, Check, Loader2, Trash2, BookOpen } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,6 +26,7 @@ interface DetailPanelProps {
   onStatusChange: (id: string, status: AppStatus) => Promise<void>;
   onNotesChange: (id: string, notes: string) => Promise<void>;
   onFollowUpChange: (id: string, date: string) => Promise<void>;
+  onRemove: (id: string) => Promise<void>;
   onRefresh: () => void;
 }
 
@@ -34,6 +36,7 @@ export function DetailPanel({
   onStatusChange,
   onNotesChange,
   onFollowUpChange,
+  onRemove,
   onRefresh,
 }: DetailPanelProps) {
   const [notes, setNotes] = useState(app.notes ?? "");
@@ -42,6 +45,8 @@ export function DetailPanel({
   );
   const [savingNotes, setSavingNotes] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const isManualUrl = !app.job.url || app.job.url.startsWith("manual://");
   const [jobUrl, setJobUrl] = useState(isManualUrl ? "" : app.job.url);
   const [savingUrl, setSavingUrl] = useState(false);
@@ -193,6 +198,15 @@ export function DetailPanel({
             onAnalysisComplete={onRefresh}
           />
 
+          {/* My Story */}
+          <Link
+            href={`/story?app=${app.id}`}
+            className="flex items-center gap-2 w-full h-9 px-3 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
+          >
+            <BookOpen className="w-4 h-4" />
+            Generate My Story
+          </Link>
+
           <Separator />
 
           {/* Status */}
@@ -319,6 +333,47 @@ export function DetailPanel({
                 </div>
               )}
             </dl>
+          </div>
+
+          {/* Remove */}
+          <Separator />
+          <div>
+            {confirmRemove ? (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+                <p className="text-xs text-muted-foreground mb-3">
+                  Remove <span className="font-medium text-foreground">{app.job.title}</span> at{" "}
+                  <span className="font-medium text-foreground">{app.job.company}</span> from your tracker? This cannot be undone.
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      setRemoving(true);
+                      await onRemove(app.id);
+                    }}
+                    disabled={removing}
+                    className="inline-flex items-center gap-1.5 h-7 px-3 rounded-md bg-destructive text-destructive-foreground text-xs font-medium hover:bg-destructive/90 transition-colors disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    {removing ? "Removing…" : "Yes, remove"}
+                  </button>
+                  <button
+                    onClick={() => setConfirmRemove(false)}
+                    disabled={removing}
+                    className="h-7 px-3 rounded-md border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmRemove(true)}
+                className="inline-flex items-center gap-1.5 h-7 px-3 rounded-md text-xs font-medium text-muted-foreground hover:text-destructive transition-colors"
+              >
+                <Trash2 className="w-3 h-3" />
+                Remove from tracker
+              </button>
+            )}
           </div>
 
         </div>

@@ -74,6 +74,12 @@ export default function TrackerPage() {
     await patchApp(id, { followUpDate });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const handleRemove = useCallback(async (id: string) => {
+    setApplications((prev) => prev.filter((a) => a.id !== id));
+    setSelected(null);
+    await fetch(`/api/applications?id=${id}`, { method: "DELETE" });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Stats ────────────────────────────────────────────────────────────────────
   const stats = {
     total: applications.length,
@@ -205,6 +211,7 @@ export default function TrackerPage() {
             onStatusChange={handleStatusChange}
             onNotesChange={handleNotesChange}
             onFollowUpChange={handleFollowUpChange}
+            onRemove={handleRemove}
             onRefresh={fetchApps}
           />
         </div>

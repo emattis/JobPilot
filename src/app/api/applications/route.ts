@@ -69,6 +69,32 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+    if (!id) {
+      return NextResponse.json({ success: false, error: "Missing id" }, { status: 400 });
+    }
+
+    const app = await prisma.application.findUnique({ where: { id } });
+    if (!app) {
+      return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
+    }
+
+    // Delete status history and referrals first, then the application
+    await prisma.$transaction([
+      prisma.statusChange.deleteMany({ where: { applicationId: id } }),
+      prisma.referral.deleteMany({ where: { applicationId: id } }),
+      prisma.application.delete({ where: { id } }),
+    ]);
+
+    return NextResponse.json({ success: true });
+  } catch {
+    return NextResponse.json({ success: false, error: "Failed to delete" }, { status: 500 });
+  }
+}
+
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
