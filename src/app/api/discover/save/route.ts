@@ -54,6 +54,10 @@ export async function POST(request: NextRequest) {
       where: { userId: profile.id, jobId: jobPosting.id },
     });
     if (existing) {
+      await prisma.discoveredJob.update({
+        where: { id: discoveredJobId },
+        data: { dismissed: true },
+      });
       return NextResponse.json({
         success: true,
         data: existing,
@@ -61,13 +65,19 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const application = await prisma.application.create({
-      data: {
-        userId: profile.id,
-        jobId: jobPosting.id,
-        status: "BOOKMARKED",
-      },
-    });
+    const [application] = await Promise.all([
+      prisma.application.create({
+        data: {
+          userId: profile.id,
+          jobId: jobPosting.id,
+          status: "BOOKMARKED",
+        },
+      }),
+      prisma.discoveredJob.update({
+        where: { id: discoveredJobId },
+        data: { dismissed: true },
+      }),
+    ]);
 
     return NextResponse.json({ success: true, data: application });
   } catch (error) {
