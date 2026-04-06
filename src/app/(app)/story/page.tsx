@@ -9,11 +9,20 @@ import {
   RefreshCw,
   Copy,
   Check,
-  ChevronDown,
+  ChevronsUpDown,
   AlertCircle,
   FileText,
   List,
+  Building2,
 } from "lucide-react";
+import {
+  Command,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+} from "@/components/ui/command";
 
 interface AppOption {
   id: string;
@@ -94,6 +103,8 @@ export default function StoryPage() {
   const [copiedDetailed, setCopiedDetailed] = useState(false);
   const [copiedTalking, setCopiedTalking] = useState(false);
   const [activeTab, setActiveTab] = useState<ViewTab>("detailed");
+  const [comboboxOpen, setComboboxOpen] = useState(false);
+  const comboboxRef = useRef<HTMLDivElement>(null);
   const [storyMeta, setStoryMeta] = useState<{
     jobTitle: string;
     company: string;
@@ -241,7 +252,19 @@ export default function StoryPage() {
     toast.success(`${label} copied to clipboard`);
   }
 
+  // Close combobox on click outside
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (comboboxRef.current && !comboboxRef.current.contains(e.target as Node)) {
+        setComboboxOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
   const isGenerating = phase.type === "generating";
+  const selectedApp = applications.find((a) => a.id === selectedAppId);
   const currentEdited = activeTab === "detailed" ? editedDetailed : editedTalking;
   const currentCopied = activeTab === "detailed" ? copiedDetailed : copiedTalking;
 
@@ -268,23 +291,59 @@ export default function StoryPage() {
           Select an application
         </label>
         <div className="flex gap-2">
-          <div className="relative flex-1">
-            <select
-              value={selectedAppId}
-              onChange={(e) => setSelectedAppId(e.target.value)}
+          <div ref={comboboxRef} className="relative flex-1">
+            <button
+              type="button"
+              onClick={() => {
+                if (!loading && !isGenerating) setComboboxOpen((v) => !v);
+              }}
               disabled={loading || isGenerating}
-              className="w-full appearance-none h-10 rounded-lg border border-border bg-card px-3 pr-8 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
+              className="w-full flex items-center justify-between h-10 rounded-lg border border-border bg-card px-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50 text-left"
             >
-              <option value="">
-                {loading ? "Loading applications..." : "Choose a tracked job..."}
-              </option>
-              {applications.map((app) => (
-                <option key={app.id} value={app.id}>
-                  {app.jobTitle} — {app.company}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none text-muted-foreground" />
+              {loading ? (
+                <span className="text-muted-foreground">Loading applications...</span>
+              ) : selectedApp ? (
+                <span className="truncate">
+                  <span className="text-foreground">{selectedApp.jobTitle}</span>
+                  <span className="text-muted-foreground"> — {selectedApp.company}</span>
+                </span>
+              ) : (
+                <span className="text-muted-foreground">Search for a tracked job...</span>
+              )}
+              <ChevronsUpDown className="w-4 h-4 shrink-0 text-muted-foreground ml-2" />
+            </button>
+
+            {comboboxOpen && (
+              <div className="absolute top-full left-0 right-0 mt-1 z-50 rounded-xl border border-border bg-popover shadow-xl overflow-hidden">
+                <Command>
+                  <CommandInput placeholder="Type to search by company or role..." />
+                  <CommandList>
+                    <CommandEmpty>No applications found.</CommandEmpty>
+                    <CommandGroup>
+                      {applications.map((app) => (
+                        <CommandItem
+                          key={app.id}
+                          value={`${app.company} ${app.jobTitle}`}
+                          onSelect={() => {
+                            setSelectedAppId(app.id);
+                            setComboboxOpen(false);
+                          }}
+                          data-checked={app.id === selectedAppId ? "true" : undefined}
+                        >
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-sm font-medium truncate">{app.jobTitle}</span>
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Building2 className="w-3 h-3 shrink-0" />
+                              {app.company}
+                            </span>
+                          </div>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </div>
+            )}
           </div>
           <button
             onClick={() => generateStory()}
