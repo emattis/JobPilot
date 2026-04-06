@@ -133,7 +133,7 @@ export default function AnalyzePage() {
   const isLoading = phase.type === "loading";
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
+    <div className="p-4 md:p-8 max-w-3xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3 mb-8">
         <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">

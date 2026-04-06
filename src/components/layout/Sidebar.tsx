@@ -15,6 +15,7 @@ import {
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -78,6 +79,10 @@ export function Sidebar() {
 
       {/* Bottom */}
       <div className="px-3 pb-4 space-y-0.5 border-t border-border pt-3">
+        <div className="flex items-center justify-between px-3 py-1 mb-1">
+          <span className="text-xs text-muted-foreground">Theme</span>
+          <ThemeToggle />
+        </div>
         <Link
           href="/profile"
           className={cn(

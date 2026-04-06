@@ -310,9 +310,9 @@ export default function ResumePage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
+    <div className="flex flex-col md:flex-row h-auto md:h-[calc(100vh-4rem)] overflow-hidden">
       {/* Left: list pane */}
-      <div className={`flex flex-col overflow-y-auto transition-all ${previewId ? "w-[420px] shrink-0 border-r border-border" : "flex-1"}`}>
+      <div className={`flex flex-col overflow-y-auto transition-all ${previewId ? "md:w-[420px] md:shrink-0 md:border-r border-border" : "flex-1"}`}>
         <div className="p-8 max-w-3xl mx-auto w-full">
           {/* Header */}
           <div className="flex items-center gap-3 mb-8">

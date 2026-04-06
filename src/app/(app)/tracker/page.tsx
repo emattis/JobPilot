@@ -82,9 +82,9 @@ export default function TrackerPage() {
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
+    <div className="flex h-[calc(100vh-3.5rem)] md:h-[calc(100vh-4rem)] overflow-hidden">
       {/* Main content */}
-      <div className={`flex flex-col flex-1 min-w-0 transition-all ${selected ? "mr-[380px]" : ""}`}>
+      <div className={`flex flex-col flex-1 min-w-0 transition-all ${selected ? "md:mr-[380px]" : ""}`}>
 
         {/* Header */}
         <div className="shrink-0 px-6 pt-6 pb-4 border-b border-border bg-background">
@@ -119,7 +119,7 @@ export default function TrackerPage() {
           </div>
 
           {/* Quick stats */}
-          <div className="flex gap-6 text-sm">
+          <div className="flex flex-wrap gap-4 md:gap-6 text-sm">
             {[
               { label: "Total", value: stats.total },
               { label: "Active", value: stats.active, color: "text-sky-400" },
@@ -137,8 +137,14 @@ export default function TrackerPage() {
         {/* Content */}
         <div className={`flex-1 overflow-auto ${view === "board" ? "" : "p-6"}`}>
           {loading ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-muted-foreground text-sm">Loading applications…</div>
+            <div className="p-4 space-y-3">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="rounded-lg border border-border bg-card p-4 animate-pulse">
+                  <div className="h-4 bg-muted rounded w-1/3 mb-2" />
+                  <div className="h-3 bg-muted rounded w-2/3 mb-1" />
+                  <div className="h-3 bg-muted rounded w-1/4" />
+                </div>
+              ))}
             </div>
           ) : view === "board" ? (
             <div className="p-4 pt-3">
@@ -159,7 +165,7 @@ export default function TrackerPage() {
 
       {/* Detail panel slide-over */}
       {selected && (
-        <div className="fixed right-0 top-16 bottom-0 w-[380px] border-l border-border bg-background shadow-xl z-20 flex flex-col">
+        <div className="fixed inset-0 md:inset-auto md:right-0 md:top-0 md:bottom-0 md:w-[380px] border-l border-border bg-background shadow-xl z-30 flex flex-col">
           <DetailPanel
             app={selected}
             onClose={() => setSelected(null)}

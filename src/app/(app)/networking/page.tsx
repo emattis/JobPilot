@@ -293,7 +293,7 @@ export default function NetworkingPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8">
+    <div className="max-w-4xl mx-auto px-4 md:px-6 py-6 md:py-8">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -317,9 +317,9 @@ export default function NetworkingPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-3 mb-5">
+      <div className="flex flex-col md:flex-row md:items-center gap-3 mb-5">
         {/* Search */}
-        <div className="relative flex-1 max-w-xs">
+        <div className="relative flex-1 md:max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
           <input
             value={searchQuery}
@@ -373,8 +373,17 @@ export default function NetworkingPage() {
 
       {/* Content */}
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        <div className="space-y-2.5">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="rounded-lg border border-border bg-card p-4 animate-pulse">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="h-4 bg-muted rounded w-28" />
+                <div className="h-3 bg-muted rounded w-40" />
+              </div>
+              <div className="h-3 bg-muted rounded w-48 mb-1" />
+              <div className="h-3 bg-muted rounded w-32" />
+            </div>
+          ))}
         </div>
       ) : referrals.length === 0 ? (
         <div className="text-center py-20">

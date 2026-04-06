@@ -117,7 +117,7 @@ export default function DiscoverPage() {
       : null;
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
+    <div className="p-4 md:p-8 max-w-3xl mx-auto">
       {/* Header */}
       <div className="flex items-start justify-between gap-4 mb-8">
         <div className="flex items-center gap-3">
@@ -182,7 +182,7 @@ export default function DiscoverPage() {
 
       {/* Stats row */}
       {jobs.length > 0 && (
-        <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="grid grid-cols-3 gap-2 md:gap-3 mb-6">
           <div className="rounded-lg border border-border bg-card px-4 py-3">
             <p className="text-xs text-muted-foreground">Total jobs</p>
             <p className="text-xl font-bold font-mono mt-0.5">{jobs.length}</p>

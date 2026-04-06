@@ -140,8 +140,26 @@ export default function MetricsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-8">
+        <div>
+          <div className="h-7 bg-muted rounded w-40 mb-2 animate-pulse" />
+          <div className="h-4 bg-muted rounded w-72 animate-pulse" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="rounded-xl border border-border bg-card p-5 animate-pulse">
+              <div className="h-3 bg-muted rounded w-20 mb-4" />
+              <div className="h-8 bg-muted rounded w-16 mb-1" />
+              <div className="h-3 bg-muted rounded w-32" />
+            </div>
+          ))}
+        </div>
+        <div className="rounded-xl border border-border bg-card p-5 animate-pulse h-28" />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {[1, 2].map((i) => (
+            <div key={i} className="rounded-xl border border-border bg-card p-5 animate-pulse h-[340px]" />
+          ))}
+        </div>
       </div>
     );
   }
@@ -162,7 +180,7 @@ export default function MetricsPage() {
   }));
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-8">
+    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6 md:space-y-8">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2.5">
