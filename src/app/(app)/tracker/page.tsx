@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { LayoutGrid, List, Plus } from "lucide-react";
+import { LayoutGrid, List, Plus, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { KanbanBoard } from "@/components/tracker/KanbanBoard";
 import { TableView } from "@/components/tracker/TableView";
 import { DetailPanel } from "@/components/tracker/DetailPanel";
+import { ImportDialog } from "@/components/tracker/ImportDialog";
+import { AddApplicationDialog } from "@/components/tracker/AddApplicationDialog";
 import type { TrackerApplication, AppStatus } from "@/types/tracker";
 
 type View = "board" | "table";
@@ -15,6 +17,8 @@ export default function TrackerPage() {
   const [applications, setApplications] = useState<TrackerApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<TrackerApplication | null>(null);
+  const [showImport, setShowImport] = useState(false);
+  const [showAddApp, setShowAddApp] = useState(false);
 
   // ── Fetch ────────────────────────────────────────────────────────────────────
   const fetchApps = useCallback(async () => {
@@ -94,6 +98,21 @@ export default function TrackerPage() {
               <p className="text-sm text-muted-foreground mt-0.5">Track every application through your pipeline</p>
             </div>
             <div className="flex items-center gap-2">
+              {/* Add buttons */}
+              <button
+                onClick={() => setShowAddApp(true)}
+                className="flex items-center gap-1.5 h-8 px-3 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Add</span>
+              </button>
+              <button
+                onClick={() => setShowImport(true)}
+                className="flex items-center gap-1.5 h-8 px-3 rounded-md border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Import</span>
+              </button>
               {/* View toggle */}
               <div className="flex rounded-md border border-border overflow-hidden">
                 <button
@@ -162,6 +181,20 @@ export default function TrackerPage() {
           )}
         </div>
       </div>
+
+      {/* Dialogs */}
+      {showImport && (
+        <ImportDialog
+          onClose={() => setShowImport(false)}
+          onImported={fetchApps}
+        />
+      )}
+      {showAddApp && (
+        <AddApplicationDialog
+          onClose={() => setShowAddApp(false)}
+          onAdded={fetchApps}
+        />
+      )}
 
       {/* Detail panel slide-over */}
       {selected && (
