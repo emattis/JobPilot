@@ -52,4 +52,5 @@ export interface TrackerApplication {
     note: string | null;
   }>;
   resume: { id: string; name: string } | null;
+  story: { id: string } | null;
 }

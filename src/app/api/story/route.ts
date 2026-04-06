@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getGeminiClient, MODEL, MAX_OUTPUT_TOKENS } from "@/lib/ai/client";
@@ -101,6 +101,43 @@ function sse(event: Record<string, unknown>): string {
   return `data: ${JSON.stringify(event)}\n\n`;
 }
 
+// ── GET: load a saved story by applicationId ────────────────────────────────
+
+export async function GET(request: NextRequest) {
+  const appId = new URL(request.url).searchParams.get("applicationId");
+  if (!appId) {
+    return NextResponse.json({ success: false, error: "Missing applicationId" }, { status: 400 });
+  }
+
+  const story = await prisma.story.findUnique({
+    where: { applicationId: appId },
+    include: {
+      application: {
+        select: { job: { select: { title: true, company: true } } },
+      },
+    },
+  });
+
+  if (!story) {
+    return NextResponse.json({ success: true, data: null });
+  }
+
+  const detailed = JSON.parse(story.detailedVersion) as StorySections;
+  const talkingPoints = JSON.parse(story.talkingPointsVersion) as StorySections;
+
+  return NextResponse.json({
+    success: true,
+    data: {
+      story: { detailed, talkingPoints },
+      jobTitle: story.application.job.title,
+      company: story.application.job.company,
+      updatedAt: story.updatedAt,
+    },
+  });
+}
+
+// ── POST: generate a new story (SSE streaming) ─────────────────────────────
+
 export async function POST(request: NextRequest) {
   const encoder = new TextEncoder();
 
@@ -202,11 +239,26 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        const story = parseAiObject<StoryResult>(fullText);
+        const storyResult = parseAiObject<StoryResult>(fullText);
+
+        // Save to database
+        send({ type: "status", message: "Saving story..." });
+        await prisma.story.upsert({
+          where: { applicationId },
+          create: {
+            applicationId,
+            detailedVersion: JSON.stringify(storyResult.detailed),
+            talkingPointsVersion: JSON.stringify(storyResult.talkingPoints),
+          },
+          update: {
+            detailedVersion: JSON.stringify(storyResult.detailed),
+            talkingPointsVersion: JSON.stringify(storyResult.talkingPoints),
+          },
+        });
 
         send({
           type: "complete",
-          story,
+          story: storyResult,
           jobTitle: job.title,
           company: job.company,
         });

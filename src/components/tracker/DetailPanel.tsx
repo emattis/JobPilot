@@ -204,7 +204,7 @@ export function DetailPanel({
             className="flex items-center gap-2 w-full h-9 px-3 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
           >
             <BookOpen className="w-4 h-4" />
-            Generate My Story
+            {app.story ? "View Story" : "Generate My Story"}
           </Link>
 
           <Separator />

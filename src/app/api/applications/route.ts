@@ -23,11 +23,13 @@ export async function GET() {
         },
         resume: { select: { id: true, name: true } },
         statusHistory: { orderBy: { changedAt: "asc" } },
+        story: { select: { id: true } },
       },
       orderBy: { createdAt: "desc" },
     });
     return NextResponse.json({ success: true, data: applications });
-  } catch {
+  } catch (err) {
+    console.error("[applications] GET error:", err);
     return NextResponse.json({ success: false, error: "Failed to fetch" }, { status: 500 });
   }
 }
@@ -82,10 +84,11 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
     }
 
-    // Delete status history and referrals first, then the application
+    // Delete related records first, then the application
     await prisma.$transaction([
       prisma.statusChange.deleteMany({ where: { applicationId: id } }),
       prisma.referral.deleteMany({ where: { applicationId: id } }),
+      prisma.story.deleteMany({ where: { applicationId: id } }),
       prisma.application.delete({ where: { id } }),
     ]);
 

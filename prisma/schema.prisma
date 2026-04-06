@@ -156,6 +156,7 @@ model Application {
 
   statusHistory StatusChange[]
   referrals     Referral[]
+  story         Story?
 }
 
 model StatusChange {
@@ -214,6 +215,16 @@ enum ReferralStatus {
   REFERRED
   DECLINED
   NO_RESPONSE
+}
+
+model Story {
+  id                   String      @id @default(cuid())
+  applicationId        String      @unique
+  application          Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  detailedVersion      String      @db.Text
+  talkingPointsVersion String      @db.Text
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
 }
 
 model DiscoveredJob {
