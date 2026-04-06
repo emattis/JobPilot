@@ -1,4 +1,7 @@
-import { getGeminiClient, MODEL } from "./client";
+import { getGeminiClient } from "./client";
+
+// Use flash model for batch scoring — much faster and cheaper than pro
+const SCORING_MODEL = "gemini-2.5-flash";
 import { parseAiArray } from "./parse-json";
 import type { DiscoveredJobInput } from "@/lib/scrapers/yc";
 
@@ -55,16 +58,22 @@ Example: [{"score": 85, "reasoning": "Matches target role and key skills."}, {"s
 async function runGeminiStream(prompt: string): Promise<string> {
   const client = getGeminiClient();
   const model = client.getGenerativeModel({
-    model: MODEL,
+    model: SCORING_MODEL,
     generationConfig: { maxOutputTokens: 2048, temperature: 0 },
   });
 
   let fullText = "";
-  const result = await model.generateContentStream(prompt);
-  for await (const chunk of result.stream) {
-    const text = chunk.text();
-    if (text) fullText += text;
+  try {
+    const result = await model.generateContentStream(prompt);
+    for await (const chunk of result.stream) {
+      const text = chunk.text();
+      if (text) fullText += text;
+    }
+  } catch (streamErr) {
+    console.error("[score-jobs] Gemini stream error:", streamErr instanceof Error ? streamErr.message : streamErr);
+    throw streamErr;
   }
+  console.log(`[score-jobs] Gemini returned ${fullText.length} chars`);
   return fullText;
 }
 

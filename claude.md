@@ -451,13 +451,88 @@ PROXY_URL=                     # For scraping rate limits
 
 ## Scraping Strategy
 
-### Job Board Sources
+### Architecture: Plugin-Based Source System
+
+Each job source is a self-contained module in `src/lib/scrapers/sources/` that exports a `fetchJobs()` function returning a standardized format. The discovery engine loops through all active sources, deduplicates by URL, and scores results. Adding a new source = dropping in a new module file.
+
+```typescript
+// Standard interface for all source modules
+interface JobSource {
+  name: string;
+  slug: string;
+  fetchJobs(filters: { roles: string[]; locations: string[] }): Promise<DiscoveredJob[]>;
+}
+```
+
+### Tier 1 — ATS Boards (Structured, Reliable)
+
+Most startups use one of a handful of applicant tracking systems with predictable URL patterns and scrapable HTML or JSON APIs. These cover ~70% of startup jobs.
+
 1. **Manual URL** — User pastes any job URL. Use cheerio to extract. Handle common ATS patterns (Greenhouse, Lever, Workday, Ashby, BambooHR)
-2. **LinkedIn Jobs** — Scrape LinkedIn job search results. Respect rate limits. Consider using the RSS feed or unofficial API endpoints. Fall back to manual if blocked
-3. **YC Work at a Startup** — Scrape workatastartup.com/jobs. Filter by user preferences
-4. **Greenhouse** — Scrape boards.greenhouse.io/{company}. Structured HTML, easy to parse
-5. **Lever** — Scrape jobs.lever.co/{company}. Clean JSON API available at /opportunities
-6. **Indeed** — Scrape with caution, aggressive anti-bot. Consider as lower priority
+2. **Greenhouse** — Scrape `boards.greenhouse.io/{company}`. Structured HTML, easy to parse. JSON API available at `boards-api.greenhouse.io/v1/boards/{company}/jobs`
+3. **Lever** — JSON API at `https://api.lever.co/v0/postings/{company}`. HTML fallback at `jobs.lever.co/{company}`
+4. **Ashby** — API at `jobs.ashbyhq.com/api/non-user-graphql`. Growing in popularity with AI startups
+5. **Workday** — More complex, requires specific URL patterns per company. Lower priority
+
+**Company watchlist approach**: Maintain a list of 50-100 company slugs in the database. A cron job scans each company's ATS board daily, detects which ATS they use based on URL pattern, and hits the corresponding scraper.
+
+### Tier 2 — VC Portfolio Pages (High Quality, Curated)
+
+Most top VCs aggregate jobs across their portfolio companies. These are high-signal sources — well-funded startups at companies vetted by top investors. The scraping pattern is two-step: scrape the VC's portfolio page for company names + career URLs, then hit each company's ATS board.
+
+**Priority VC portfolio sources:**
+- **YC Work at a Startup** — workatastartup.com/jobs (already built)
+- **a16z portfolio jobs** — jobs.a16z.com
+- **Sequoia portfolio** — sequoiacap.com/our-companies (links to individual ATS boards)
+- **Index Ventures portfolio** — indexventures.com/companies
+- **Benchmark portfolio** — benchmark.com/portfolio
+- **Greylock portfolio** — greylock.com/portfolio
+- **Lightspeed portfolio** — lsvp.com/portfolio
+- **Accel portfolio** — accel.com/portfolio
+- **FirstMark Capital** — firstmarkcap.com/portfolio (strong NYC presence)
+- **USV (Union Square Ventures)** — usv.com/companies (strong NYC presence)
+- **Lux Capital** — luxcapital.com/companies (deep tech focus)
+- **Contrary portfolio** — jobs.contrary.com (specifically early career focused)
+- **Founders Fund** — foundersfund.com/portfolio
+- **Kleiner Perkins** — kleinerperkins.com/portfolios
+- **NEA** — nea.com/portfolio
+- **Bessemer** — bvp.com/portfolio
+
+**Implementation approach**: Create a Prisma model `VCSource` with fields for VC name, portfolio page URL, scraper type, and active status. Build a generic VC portfolio scraper that:
+1. Fetches the portfolio page
+2. Extracts company names and career page URLs
+3. Detects ATS type (Greenhouse/Lever/Ashby) from the career URL pattern
+4. Passes each company to the appropriate ATS scraper
+5. Deduplicates across VCs (many companies appear in multiple portfolios)
+
+### Tier 3 — Aggregators
+
+These sites already aggregate jobs across many sources:
+
+- **Wellfound** (formerly AngelList Talent) — startup jobs, accessible structure
+- **Otta** — curated startup roles, harder to scrape but high quality
+- **Hacker News "Who's Hiring"** — Monthly thread (1st of each month), very scrapable, strong signal for AI/tech roles. Parse the HN API for the latest thread, extract job posts
+- **Builtin** — Tech jobs by city, good for NYC filtering
+- **Pallet.com** — Community-based job boards
+- **Simplify** — Aggregated startup jobs
+
+### Tier 4 — Niche Boards
+
+Depending on target roles:
+
+- **AI/ML roles**: ai-jobs.net, mlops.community job board
+- **Product roles**: Lenny's job board, productboard careers
+- **VC/investing roles**: John Gannon's VC newsletter job board, VCPE job board, VC Twitter/X community
+- **Climate/impact**: climatebase.org, terra.do/climate-jobs
+- **Crypto/web3**: crypto.jobs, web3.career
+
+### Tier 5 — LinkedIn (Handle With Care)
+
+LinkedIn aggressively blocks scrapers. Options in order of reliability:
+1. **LinkedIn job search RSS** — Limited but won't get blocked
+2. **LinkedIn API** (if you can get access) — Official but restrictive
+3. **Manual paste fallback** — Let user paste LinkedIn job URLs for analysis (already supported)
+4. **Do not scrape LinkedIn at scale** — Account ban risk is high
 
 ### Scraping Best Practices
 - Cache scraped pages for 24 hours to avoid re-fetching
@@ -466,6 +541,35 @@ PROXY_URL=                     # For scraping rate limits
 - Store raw HTML alongside extracted data for debugging
 - Fall back to asking user to paste job description text if scraping fails
 - For deployed version, consider Browserless.io or similar for headless Chrome
+- Deduplicate jobs by URL across all sources before scoring
+- Track source effectiveness — which sources yield the highest match rates and response rates
+
+### Database Models for Source Management
+
+```prisma
+model CompanyWatchlist {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   // ATS slug (e.g., "anthropic" for boards.greenhouse.io/anthropic)
+  atsType      String   // greenhouse, lever, ashby, workday, custom
+  careerUrl    String   // Direct career page URL
+  vcSource     String?  // Which VC portfolio this came from
+  active       Boolean  @default(true)
+  lastScanned  DateTime?
+  createdAt    DateTime @default(now())
+}
+
+model VCSource {
+  id             String   @id @default(cuid())
+  name           String   // e.g., "a16z", "Sequoia"
+  portfolioUrl   String   // URL of their portfolio/jobs page
+  scraperType    String   // Type of scraper needed
+  active         Boolean  @default(true)
+  lastScanned    DateTime?
+  companiesFound Int      @default(0)
+  createdAt      DateTime @default(now())
+}
+```
 
 ---
 

@@ -108,13 +108,22 @@ export async function POST() {
         });
         const existingByUrl = new Map(existingJobs.map((j) => [j.url, j]));
 
-        // Jobs that need re-scoring: previously failed (score = 0 or null)
+        // Jobs that need re-scoring: previously failed (score = 0/null, or "Could not score")
+        const existingWithReasoning = await prisma.discoveredJob.findMany({
+          select: { url: true, relevanceScore: true, reasoning: true },
+        });
         const staleUrls = new Set(
-          existingJobs
-            .filter((j) => j.relevanceScore === null || j.relevanceScore === 0)
+          existingWithReasoning
+            .filter(
+              (j) =>
+                j.relevanceScore === null ||
+                j.relevanceScore === 0 ||
+                j.reasoning === "Could not score" ||
+                j.reasoning === ""
+            )
             .map((j) => j.url)
         );
-        console.log(`[discover] ${existingJobs.size} existing jobs, ${staleUrls.size} need re-scoring`);
+        console.log(`[discover] ${existingJobs.length} existing jobs, ${staleUrls.size} need re-scoring`);
 
         const newJobsToScore: DiscoveredJobInput[] = [];
 
@@ -208,7 +217,13 @@ export async function POST() {
         );
 
         const newCount = scored.filter((j) => !staleUrls.has(j.url)).length;
-        console.log(`[discover] Saved ${saved.filter((r) => r.status === "fulfilled").length}; ${newCount} genuinely new`);
+        const fulfilled = saved.filter((r) => r.status === "fulfilled").length;
+        const rejected = saved.filter((r) => r.status === "rejected");
+        console.log(`[discover] Saved ${fulfilled}/${saved.length}; ${newCount} genuinely new`);
+        if (rejected.length > 0) {
+          console.error(`[discover] ${rejected.length} DB saves failed:`, rejected.map((r) => (r as PromiseRejectedResult).reason?.message ?? r));
+        }
+        console.log(`[discover] Score distribution:`, scored.map((j) => `${j.company}/${j.title}: ${j.relevanceScore}`).join(", "));
 
         // Return full feed sorted by score, filtered by location preference
         const allRaw = await prisma.discoveredJob.findMany({
