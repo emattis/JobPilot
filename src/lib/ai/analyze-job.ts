@@ -82,11 +82,9 @@ export async function analyzeCandidateFit(
     "cultureFitScore",
     "growthPotentialScore",
   ] as const;
+  const record = parsed as Record<string, unknown>;
   for (const field of scoreFields) {
-    (parsed as Record<string, number>)[field] = Math.max(
-      0,
-      Math.min(100, Math.round(Number((parsed as Record<string, number>)[field]) || 0))
-    );
+    record[field] = Math.max(0, Math.min(100, Math.round(Number(record[field]) || 0)));
   }
 
   // Merge company analysis from the role cache
