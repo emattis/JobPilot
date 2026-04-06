@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     const referral = await prisma.referral.findUnique({
       where: { id },
       include: {
-        application: { include: { job: { select: { title: true, company: true } } } },
+        application: { include: { job: { select: { title: true, company: true, description: true } } } },
       },
     });
     if (!referral) return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
       relationship: referral.relationship,
       jobTitle: referral.application.job.title,
       jobCompany: referral.application.job.company,
+      jobDescription: referral.application.job.description ?? null,
       candidateName: profile?.name ?? "I",
       candidateSummary: profile?.summary ?? null,
     });

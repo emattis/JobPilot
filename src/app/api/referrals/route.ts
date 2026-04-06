@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     // Load application + job for AI context
     const application = await prisma.application.findUnique({
       where: { id: input.applicationId },
-      include: { job: { select: { title: true, company: true } } },
+      include: { job: { select: { title: true, company: true, description: true } } },
     });
     if (!application) {
       return NextResponse.json({ success: false, error: "Application not found" }, { status: 404 });
@@ -84,6 +84,7 @@ export async function POST(request: NextRequest) {
         relationship: input.relationship,
         jobTitle: application.job.title,
         jobCompany: application.job.company,
+        jobDescription: application.job.description ?? null,
         candidateName: profile?.name ?? "I",
         candidateSummary: profile?.summary ?? null,
       });
