@@ -10,6 +10,8 @@ import {
   X,
   Wifi,
   ExternalLink,
+  Bookmark,
+  Check,
 } from "lucide-react";
 
 export interface DiscoveredJobRecord {
@@ -28,6 +30,8 @@ export interface DiscoveredJobRecord {
 interface Props {
   job: DiscoveredJobRecord;
   onDismiss: (id: string) => void;
+  onSave?: (id: string) => void;
+  isSaved?: boolean;
   nested?: boolean;
 }
 
@@ -69,9 +73,10 @@ function ScoreBadge({ score }: { score: number | null }) {
   );
 }
 
-export function JobCard({ job, onDismiss, nested = false }: Props) {
+export function JobCard({ job, onDismiss, onSave, isSaved = false, nested = false }: Props) {
   const router = useRouter();
   const [dismissing, setDismissing] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const sourceLabel = SOURCE_LABELS[job.source] ?? job.source;
   const sourceColor =
@@ -91,6 +96,28 @@ export function JobCard({ job, onDismiss, nested = false }: Props) {
     } catch {
       toast.error("Failed to dismiss");
       setDismissing(false);
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/discover/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ discoveredJobId: job.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save");
+      if (data.duplicate) {
+        toast.info(`${job.title} at ${job.company} is already tracked`);
+      } else {
+        toast.success(`Saved ${job.title} at ${job.company} to tracker`);
+      }
+      onSave?.(job.id);
+    } catch {
+      toast.error("Failed to save to tracker");
+      setSaving(false);
     }
   }
 
@@ -167,6 +194,24 @@ export function JobCard({ job, onDismiss, nested = false }: Props) {
               <Zap className="w-3 h-3" />
               Analyze
             </button>
+            {isSaved ? (
+              <button
+                disabled
+                className="inline-flex items-center gap-1.5 h-7 px-3 rounded-md border border-green-500/30 text-xs font-medium text-green-400 bg-green-500/10 cursor-default"
+              >
+                <Check className="w-3 h-3" />
+                Saved
+              </button>
+            ) : (
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="inline-flex items-center gap-1.5 h-7 px-3 rounded-md border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors disabled:opacity-40"
+              >
+                <Bookmark className="w-3 h-3" />
+                {saving ? "Saving…" : "Save to Tracker"}
+              </button>
+            )}
             <button
               onClick={handleDismiss}
               disabled={dismissing}

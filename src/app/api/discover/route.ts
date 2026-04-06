@@ -30,13 +30,20 @@ function matchesLocation(
 
 export async function GET() {
   try {
-    const [rawJobs, profile] = await Promise.all([
+    const [rawJobs, profile, trackedPostings] = await Promise.all([
       prisma.discoveredJob.findMany({
         where: { dismissed: false },
         orderBy: [{ relevanceScore: "desc" }, { savedAt: "desc" }],
       }),
       prisma.userProfile.findFirst({ select: { preferredLocations: true } }),
+      // Find all JobPosting URLs that have an Application (i.e. saved to tracker)
+      prisma.jobPosting.findMany({
+        where: { applications: { some: {} } },
+        select: { url: true },
+      }),
     ]);
+
+    const trackedUrls = new Set(trackedPostings.map((p) => p.url));
 
     const preferredLocations = profile?.preferredLocations ?? [];
     console.log(`[discover] preferredLocations from DB: [${preferredLocations.join(", ")}]`);
@@ -45,7 +52,10 @@ export async function GET() {
     const jobs = rawJobs.filter((j) => matchesLocation(j, preferredLocations));
     console.log(`[discover] Jobs after location filter: ${jobs.length}`);
 
-    return NextResponse.json({ success: true, data: jobs });
+    // Mark which discovered jobs are already saved to the tracker
+    const savedIds = jobs.filter((j) => trackedUrls.has(j.url)).map((j) => j.id);
+
+    return NextResponse.json({ success: true, data: jobs, savedIds });
   } catch {
     return NextResponse.json(
       { success: false, error: "Failed to fetch discovered jobs" },
