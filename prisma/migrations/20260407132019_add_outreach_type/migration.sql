@@ -1,0 +1,5 @@
+-- CreateEnum
+CREATE TYPE "OutreachType" AS ENUM ('WARM_INTRO', 'COLD_OUTREACH', 'ALUMNI', 'HIRING_MANAGER', 'RECRUITER', 'EMPLOYEE');
+
+-- AlterTable
+ALTER TABLE "Referral" ADD COLUMN     "outreachType" "OutreachType" NOT NULL DEFAULT 'WARM_INTRO';

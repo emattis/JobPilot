@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { format, parseISO } from "date-fns";
-import { X, ExternalLink, ChevronDown, Check, Loader2, Trash2, BookOpen } from "lucide-react";
+import { X, ExternalLink, ChevronDown, Check, Loader2, Trash2, BookOpen, FileText, CheckCircle2, XCircle, Minus } from "lucide-react";
 import Link from "next/link";
+import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -189,23 +190,113 @@ export function DetailPanel({
             </div>
           </div>
 
-          {/* AI Analysis */}
-          <AnalyzeSection
-            jobUrl={app.job.url}
-            jobTitle={app.job.title}
-            jobCompany={app.job.company}
-            hasAnalysis={!!analysis}
-            onAnalysisComplete={onRefresh}
-          />
+          {/* AI Analysis — saved results or analyze button */}
+          {analysis ? (
+            <div>
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                Analysis
+              </h3>
 
-          {/* My Story */}
-          <Link
-            href={`/story?app=${app.id}`}
-            className="flex items-center gap-2 w-full h-9 px-3 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
-          >
-            <BookOpen className="w-4 h-4" />
-            {app.story ? "View Story" : "Generate My Story"}
-          </Link>
+              {/* Score grid */}
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                {[
+                  { label: "Overall Fit", score: analysis.overallFitScore },
+                  { label: "Skills", score: analysis.skillMatchScore },
+                  { label: "Experience", score: analysis.experienceMatchScore },
+                  { label: "Culture", score: analysis.cultureFitScore },
+                ].map((s) => (
+                  <div
+                    key={s.label}
+                    className={`rounded-lg border px-3 py-2 ${s.score >= 80 ? "bg-emerald-500/10 border-emerald-500/20" : s.score >= 60 ? "bg-yellow-500/10 border-yellow-500/20" : "bg-red-500/10 border-red-500/20"}`}
+                  >
+                    <p className="text-[10px] text-muted-foreground">{s.label}</p>
+                    <p className={`text-lg font-bold ${s.score >= 80 ? "text-emerald-400" : s.score >= 60 ? "text-yellow-400" : "text-red-400"}`}>
+                      {s.score}%
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Verdict */}
+              <div className={`rounded-lg border px-3 py-2 mb-3 ${analysis.shouldApply ? "border-emerald-500/20 bg-emerald-500/5" : "border-red-500/20 bg-red-500/5"}`}>
+                <p className={`text-xs font-medium ${analysis.shouldApply ? "text-emerald-400" : "text-red-400"}`}>
+                  {analysis.shouldApply ? "Recommended to apply" : "May not be the best fit"}
+                </p>
+              </div>
+
+              {/* Skills */}
+              <div className="mb-3">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                  Skills
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {analysis.matchingSkills.slice(0, 6).map((s) => (
+                    <span key={s} className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded border bg-green-500/10 text-green-400 border-green-500/20">
+                      <CheckCircle2 className="w-2.5 h-2.5" /> {s}
+                    </span>
+                  ))}
+                  {analysis.missingSkills.slice(0, 4).map((s) => (
+                    <span key={s} className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded border bg-red-500/10 text-red-400 border-red-500/20">
+                      <XCircle className="w-2.5 h-2.5" /> {s}
+                    </span>
+                  ))}
+                  {analysis.transferableSkills.slice(0, 3).map((s) => (
+                    <span key={s} className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded border bg-blue-500/10 text-blue-400 border-blue-500/20">
+                      <Minus className="w-2.5 h-2.5" /> {s}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Reasoning */}
+              <div className="mb-3">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                  AI Reasoning
+                </p>
+                <div className="text-xs text-foreground/80 leading-relaxed prose prose-invert prose-xs max-w-none">
+                  <ReactMarkdown>{analysis.reasoning}</ReactMarkdown>
+                </div>
+              </div>
+
+              {/* Resume improvements */}
+              {analysis.resumeImprovements && (
+                <div>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                    Resume Suggestions
+                  </p>
+                  <div className="text-xs text-foreground/80 leading-relaxed prose prose-invert prose-xs max-w-none">
+                    <ReactMarkdown>{analysis.resumeImprovements}</ReactMarkdown>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <AnalyzeSection
+              jobUrl={app.job.url}
+              jobTitle={app.job.title}
+              jobCompany={app.job.company}
+              hasAnalysis={false}
+              onAnalysisComplete={onRefresh}
+            />
+          )}
+
+          {/* Action links */}
+          <div className="flex flex-col gap-2">
+            <Link
+              href={`/story?app=${app.id}`}
+              className="flex items-center gap-2 w-full h-9 px-3 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
+            >
+              <BookOpen className="w-4 h-4" />
+              {app.story ? "View Story" : "Generate My Story"}
+            </Link>
+            <Link
+              href={`/resume?job=${app.job.id}`}
+              className="flex items-center gap-2 w-full h-9 px-3 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
+            >
+              <FileText className="w-4 h-4" />
+              {analysis?.resumeImprovements ? "View Resume Suggestions" : "Tailor Resume"}
+            </Link>
+          </div>
 
           <Separator />
 

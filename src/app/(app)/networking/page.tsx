@@ -13,7 +13,8 @@ import {
   Filter,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { Referral, ReferralStatus } from "@/types/referral";
+import type { Referral, ReferralStatus, OutreachType } from "@/types/referral";
+import { OUTREACH_TYPE_LABELS } from "@/types/referral";
 
 // ── Status config ────────────────────────────────────────────────────────────
 
@@ -136,6 +137,9 @@ function ReferralRow({
                   : ""}
               </span>
             )}
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+              {OUTREACH_TYPE_LABELS[referral.outreachType]}
+            </span>
             {followUp && (
               <span className="flex items-center gap-1 text-[10px] font-medium text-yellow-400 bg-yellow-500/10 px-1.5 py-0.5 rounded-full">
                 <AlertCircle className="w-3 h-3" />
@@ -228,6 +232,7 @@ export default function NetworkingPage() {
   const [referrals, setReferrals] = useState<Referral[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<ReferralStatus | "ALL" | "FOLLOW_UP">("ALL");
+  const [typeFilter, setTypeFilter] = useState<OutreachType | "ALL">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
@@ -254,6 +259,11 @@ export default function NetworkingPage() {
       list = list.filter((r) => r.status === statusFilter);
     }
 
+    // Type filter
+    if (typeFilter !== "ALL") {
+      list = list.filter((r) => r.outreachType === typeFilter);
+    }
+
     // Search
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -269,7 +279,7 @@ export default function NetworkingPage() {
     }
 
     return list;
-  }, [referrals, statusFilter, searchQuery]);
+  }, [referrals, statusFilter, typeFilter, searchQuery]);
 
   // Status counts for filter badges
   const statusCounts = useMemo(() => {
@@ -369,6 +379,31 @@ export default function NetworkingPage() {
             );
           })}
         </div>
+
+        {/* Outreach type filter */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {(
+            [
+              { key: "ALL", label: "All types" },
+              ...Object.entries(OUTREACH_TYPE_LABELS).map(([key, label]) => ({ key, label })),
+            ] as { key: OutreachType | "ALL"; label: string }[]
+          ).map(({ key, label }) => {
+            const active = typeFilter === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setTypeFilter(key)}
+                className={`h-7 px-2.5 rounded-full text-xs font-medium transition-colors ${
+                  active
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Content */}
@@ -390,7 +425,7 @@ export default function NetworkingPage() {
           <Users className="w-10 h-10 text-muted-foreground/20 mx-auto mb-3" />
           <p className="text-muted-foreground text-sm">No outreach contacts yet.</p>
           <p className="text-muted-foreground/50 text-xs mt-1">
-            Add contacts from the &quot;Warm Intros&quot; section on any application in the Tracker.
+            Add contacts from the &quot;Outreach&quot; section on any application in the Tracker.
           </p>
         </div>
       ) : filtered.length === 0 ? (

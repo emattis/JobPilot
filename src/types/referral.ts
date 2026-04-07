@@ -6,6 +6,23 @@ export type ReferralStatus =
   | "DECLINED"
   | "NO_RESPONSE";
 
+export type OutreachType =
+  | "WARM_INTRO"
+  | "COLD_OUTREACH"
+  | "ALUMNI"
+  | "HIRING_MANAGER"
+  | "RECRUITER"
+  | "EMPLOYEE";
+
+export const OUTREACH_TYPE_LABELS: Record<OutreachType, string> = {
+  WARM_INTRO: "Warm Intro",
+  COLD_OUTREACH: "Cold Outreach",
+  ALUMNI: "Alumni",
+  HIRING_MANAGER: "Hiring Manager",
+  RECRUITER: "Recruiter",
+  EMPLOYEE: "Employee",
+};
+
 export interface Referral {
   id: string;
   applicationId: string;
@@ -13,6 +30,7 @@ export interface Referral {
   contactRole: string | null;
   contactCompany: string | null;
   contactLinkedin: string | null;
+  outreachType: OutreachType;
   relationship: string;
   messageTemplate: string | null;
   messageSentAt: string | null;

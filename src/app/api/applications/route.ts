@@ -17,7 +17,6 @@ export async function GET() {
             analyses: {
               orderBy: { createdAt: "desc" },
               take: 1,
-              select: { overallFitScore: true, shouldApply: true, id: true },
             },
           },
         },

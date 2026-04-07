@@ -195,7 +195,8 @@ model Referral {
   contactRole    String?
   contactCompany String?
   contactLinkedin String?
-  relationship   String         @db.Text   // how I know them
+  outreachType   OutreachType   @default(WARM_INTRO)
+  relationship   String         @db.Text   // how I know them / connection context
   messageTemplate String?       @db.Text   // AI-generated outreach draft
   messageSentAt  DateTime?
   responseReceivedAt DateTime?
@@ -217,6 +218,15 @@ enum ReferralStatus {
   NO_RESPONSE
 }
 
+enum OutreachType {
+  WARM_INTRO
+  COLD_OUTREACH
+  ALUMNI
+  HIRING_MANAGER
+  RECRUITER
+  EMPLOYEE
+}
+
 model Story {
   id                   String      @id @default(cuid())
   applicationId        String      @unique
@@ -225,6 +235,31 @@ model Story {
   talkingPointsVersion String      @db.Text
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
+}
+
+model CompanyWatchlist {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String
+  atsType     String    // greenhouse, lever, ashby, workday, custom
+  careerUrl   String
+  vcSource    String?   // Which VC portfolio this came from
+  active      Boolean   @default(true)
+  lastScanned DateTime?
+  jobsFound   Int       @default(0)
+  createdAt   DateTime  @default(now())
+}
+
+model VCSource {
+  id             String    @id @default(cuid())
+  name           String
+  portfolioUrl   String
+  scraperType    String    // vc_portfolio, job_board, ats_board
+  active         Boolean   @default(true)
+  lastScanned    DateTime?
+  companiesFound Int       @default(0)
+  jobsFound      Int       @default(0)
+  createdAt      DateTime  @default(now())
 }
 
 model DiscoveredJob {

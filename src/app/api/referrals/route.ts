@@ -9,6 +9,7 @@ const createSchema = z.object({
   contactRole: z.string().optional(),
   contactCompany: z.string().optional(),
   contactLinkedin: z.string().optional(),
+  outreachType: z.enum(["WARM_INTRO", "COLD_OUTREACH", "ALUMNI", "HIRING_MANAGER", "RECRUITER", "EMPLOYEE"]).default("WARM_INTRO"),
   relationship: z.string().min(1),
 });
 
@@ -71,8 +72,18 @@ export async function POST(request: NextRequest) {
     }
 
     const profile = await prisma.userProfile.findFirst({
-      select: { name: true, summary: true },
+      select: { id: true, name: true, summary: true },
     });
+
+    // Get resume for AI context
+    let resumeText: string | null = null;
+    if (profile) {
+      const resume = await prisma.resume.findFirst({
+        where: { userId: profile.id, isDefault: true },
+        select: { rawText: true },
+      });
+      resumeText = resume?.rawText ?? null;
+    }
 
     // Generate outreach message
     let messageTemplate: string | null = null;
@@ -81,16 +92,17 @@ export async function POST(request: NextRequest) {
         contactName: input.contactName,
         contactRole: input.contactRole ?? null,
         contactCompany: input.contactCompany ?? null,
+        outreachType: input.outreachType,
         relationship: input.relationship,
         jobTitle: application.job.title,
         jobCompany: application.job.company,
         jobDescription: application.job.description ?? null,
         candidateName: profile?.name ?? "I",
         candidateSummary: profile?.summary ?? null,
+        resumeText,
       });
     } catch (aiErr) {
       console.error("[referrals] AI outreach generation failed:", aiErr);
-      // Continue without message — user can regenerate
     }
 
     const referral = await prisma.referral.create({
@@ -100,6 +112,7 @@ export async function POST(request: NextRequest) {
         contactRole: input.contactRole ?? null,
         contactCompany: input.contactCompany ?? null,
         contactLinkedin: input.contactLinkedin ?? null,
+        outreachType: input.outreachType,
         relationship: input.relationship,
         messageTemplate,
       },

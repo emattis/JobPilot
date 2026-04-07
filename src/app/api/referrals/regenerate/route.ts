@@ -15,18 +15,29 @@ export async function POST(request: NextRequest) {
     });
     if (!referral) return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
 
-    const profile = await prisma.userProfile.findFirst({ select: { name: true, summary: true } });
+    const profile = await prisma.userProfile.findFirst({ select: { id: true, name: true, summary: true } });
+
+    let resumeText: string | null = null;
+    if (profile) {
+      const resume = await prisma.resume.findFirst({
+        where: { userId: profile.id, isDefault: true },
+        select: { rawText: true },
+      });
+      resumeText = resume?.rawText ?? null;
+    }
 
     const messageTemplate = await generateOutreachMessage({
       contactName: referral.contactName,
       contactRole: referral.contactRole,
       contactCompany: referral.contactCompany,
+      outreachType: referral.outreachType,
       relationship: referral.relationship,
       jobTitle: referral.application.job.title,
       jobCompany: referral.application.job.company,
       jobDescription: referral.application.job.description ?? null,
       candidateName: profile?.name ?? "I",
       candidateSummary: profile?.summary ?? null,
+      resumeText,
     });
 
     const updated = await prisma.referral.update({

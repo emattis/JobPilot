@@ -18,7 +18,8 @@ import {
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import type { Referral, ReferralStatus } from "@/types/referral";
+import type { Referral, ReferralStatus, OutreachType } from "@/types/referral";
+import { OUTREACH_TYPE_LABELS } from "@/types/referral";
 
 // ── Status config ─────────────────────────────────────────────────────────────
 
@@ -39,14 +40,27 @@ function needsFollowUp(r: Referral): boolean {
 
 // ── Add contact form ──────────────────────────────────────────────────────────
 
+const OUTREACH_TYPES: OutreachType[] = [
+  "WARM_INTRO", "COLD_OUTREACH", "ALUMNI", "HIRING_MANAGER", "RECRUITER", "EMPLOYEE",
+];
+
+const RELATIONSHIP_PLACEHOLDERS: Record<OutreachType, string> = {
+  WARM_INTRO: "Former colleague at Acme",
+  COLD_OUTREACH: "Found them on LinkedIn",
+  ALUMNI: "Alumni from MIT CS '20",
+  HIRING_MANAGER: "Hiring manager for this role",
+  RECRUITER: "Recruiter who posted the role",
+  EMPLOYEE: "Works on the same team",
+};
+
 function AddContactForm({
   onAdd,
   onCancel,
 }: {
-  onAdd: (data: { contactName: string; contactRole: string; contactCompany: string; relationship: string }) => void;
+  onAdd: (data: { contactName: string; contactRole: string; contactCompany: string; outreachType: OutreachType; relationship: string }) => void;
   onCancel: () => void;
 }) {
-  const [form, setForm] = useState({ contactName: "", contactRole: "", contactCompany: "", relationship: "" });
+  const [form, setForm] = useState({ contactName: "", contactRole: "", contactCompany: "", outreachType: "WARM_INTRO" as OutreachType, relationship: "" });
 
   function set(k: keyof typeof form, v: string) {
     setForm((p) => ({ ...p, [k]: v }));
@@ -68,6 +82,18 @@ function AddContactForm({
           />
         </div>
         <div>
+          <label className="text-[10px] text-muted-foreground mb-0.5 block">Outreach type</label>
+          <select
+            value={form.outreachType}
+            onChange={(e) => set("outreachType", e.target.value)}
+            className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            {OUTREACH_TYPES.map((t) => (
+              <option key={t} value={t}>{OUTREACH_TYPE_LABELS[t]}</option>
+            ))}
+          </select>
+        </div>
+        <div>
           <label className="text-[10px] text-muted-foreground mb-0.5 block">Their role</label>
           <input
             value={form.contactRole}
@@ -85,15 +111,15 @@ function AddContactForm({
             className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           />
         </div>
-        <div>
-          <label className="text-[10px] text-muted-foreground mb-0.5 block">How you know them *</label>
-          <input
-            value={form.relationship}
-            onChange={(e) => set("relationship", e.target.value)}
-            placeholder="Former colleague at Acme"
-            className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          />
-        </div>
+      </div>
+      <div>
+        <label className="text-[10px] text-muted-foreground mb-0.5 block">Connection context *</label>
+        <input
+          value={form.relationship}
+          onChange={(e) => set("relationship", e.target.value)}
+          placeholder={RELATIONSHIP_PLACEHOLDERS[form.outreachType]}
+          className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        />
       </div>
       <div className="flex gap-2 pt-0.5">
         <button
@@ -207,6 +233,9 @@ function ReferralCard({
                 {referral.contactRole}{referral.contactCompany ? ` @ ${referral.contactCompany}` : ""}
               </span>
             )}
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+              {OUTREACH_TYPE_LABELS[referral.outreachType]}
+            </span>
             <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${sc.color} ${sc.bg}`}>
               {sc.label}
             </span>
@@ -417,6 +446,7 @@ export function ReferralSection({ applicationId, jobTitle, jobCompany }: Referra
     contactName: string;
     contactRole: string;
     contactCompany: string;
+    outreachType: OutreachType;
     relationship: string;
   }) {
     setCreating(true);
@@ -463,7 +493,7 @@ export function ReferralSection({ applicationId, jobTitle, jobCompany }: Referra
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
           <Users className="w-3.5 h-3.5" />
-          Warm Intros
+          Outreach
           {referrals.length > 0 && (
             <span className="font-normal text-muted-foreground/60">({referrals.length})</span>
           )}

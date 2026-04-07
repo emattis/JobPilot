@@ -41,7 +41,20 @@ export interface TrackerApplication {
     analyses: Array<{
       id: string;
       overallFitScore: number;
+      skillMatchScore: number;
+      experienceMatchScore: number;
+      cultureFitScore: number;
+      growthPotentialScore: number;
       shouldApply: boolean;
+      confidenceLevel: string;
+      reasoning: string;
+      matchingSkills: string[];
+      missingSkills: string[];
+      transferableSkills: string[];
+      resumeImprovements: string;
+      coverLetterTips: string | null;
+      interviewPrepTopics: string[];
+      companyAnalysis: string | null;
     }>;
   };
   statusHistory: Array<{

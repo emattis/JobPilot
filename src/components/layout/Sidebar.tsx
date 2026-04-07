@@ -14,6 +14,7 @@ import {
   Briefcase,
   Users,
   BookOpen,
+  Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -27,6 +28,7 @@ const navItems = [
   { href: "/metrics", label: "Metrics", icon: BarChart2 },
   { href: "/networking", label: "Networking", icon: Users },
   { href: "/story", label: "My Story", icon: BookOpen },
+  { href: "/sources", label: "Sources", icon: Database },
 ];
 
 export function Sidebar() {
