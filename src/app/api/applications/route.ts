@@ -112,12 +112,45 @@ export async function PATCH(request: NextRequest) {
     const current = await prisma.application.findUnique({ where: { id } });
     if (!current) return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
 
+    // Auto-set timestamp fields on first transition to key statuses
+    const timestampUpdates: Record<string, Date> = {};
+    if (status && status !== current.status) {
+      const now = new Date();
+
+      if (status === "APPLIED" && !current.appliedAt) {
+        timestampUpdates.appliedAt = now;
+      }
+
+      const interviewStatuses = [
+        "SCREENING", "PHONE_INTERVIEW", "TECHNICAL_INTERVIEW",
+        "ONSITE_INTERVIEW", "FINAL_ROUND",
+      ];
+      if (interviewStatuses.includes(status) && !current.interviewAt) {
+        timestampUpdates.interviewAt = now;
+      }
+
+      if (status === "REJECTED" && !current.rejectedAt) {
+        timestampUpdates.rejectedAt = now;
+      }
+
+      if ((status === "OFFER" || status === "ACCEPTED") && !current.offeredAt) {
+        timestampUpdates.offeredAt = now;
+      }
+
+      if (status === "OFFER" || status === "ACCEPTED") {
+        if (!current.responseAt) {
+          timestampUpdates.responseAt = now;
+        }
+      }
+    }
+
     const updated = await prisma.application.update({
       where: { id },
       data: {
         ...(status && { status: status as never }),
         ...(notes !== undefined && { notes }),
         ...(followUpDate && { followUpDate: new Date(followUpDate) }),
+        ...timestampUpdates,
       },
     });
 
