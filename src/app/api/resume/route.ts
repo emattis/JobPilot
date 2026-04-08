@@ -2,23 +2,31 @@ import { NextRequest, NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await getSessionUser();
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    const profileId = session.profileId;
+
     const id = request.nextUrl.searchParams.get("id");
 
     // Single resume with rawText (for preview)
     if (id) {
       const resume = await prisma.resume.findUnique({
         where: { id },
-        select: { id: true, name: true, isDefault: true, createdAt: true, rawText: true, fileUrl: true },
+        select: { id: true, name: true, isDefault: true, createdAt: true, rawText: true, fileUrl: true, userId: true },
       });
-      if (!resume) return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
+      if (!resume || resume.userId !== profileId) return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
       return NextResponse.json({ success: true, data: resume });
     }
 
     // All resumes (list — no rawText)
     const resumes = await prisma.resume.findMany({
+      where: { userId: profileId },
       orderBy: { createdAt: "desc" },
       select: { id: true, name: true, isDefault: true, createdAt: true },
     });
@@ -40,7 +48,11 @@ export async function POST(request: NextRequest) {
 
     // ── Text-only save (tailored resume from AI optimization) ──────────────
     if (!file && rawTextOverride) {
-      const profile = await prisma.userProfile.findFirst();
+      const session = await getSessionUser();
+      if (!session) {
+        return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+      }
+      const profile = await prisma.userProfile.findUnique({ where: { id: session.profileId } });
       if (!profile) {
         return NextResponse.json({ success: false, error: "No profile found" }, { status: 400 });
       }
@@ -88,8 +100,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Determine user (solo-user: get or fail)
-    const profile = await prisma.userProfile.findFirst();
+    // Determine user
+    const sessionForUpload = await getSessionUser();
+    if (!sessionForUpload) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    const profile = await prisma.userProfile.findUnique({ where: { id: sessionForUpload.profileId } });
     if (!profile) {
       return NextResponse.json(
         { success: false, error: "Please complete your profile before uploading a resume" },
@@ -146,7 +162,13 @@ export async function PATCH(request: NextRequest) {
     const { id } = await request.json();
     if (!id) return NextResponse.json({ success: false, error: "Missing id" }, { status: 400 });
 
-    const profile = await prisma.userProfile.findFirst();
+    const session = await getSessionUser();
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    const profileId = session.profileId;
+
+    const profile = await prisma.userProfile.findUnique({ where: { id: profileId } });
     if (!profile) return NextResponse.json({ success: false, error: "No profile" }, { status: 400 });
 
     await prisma.resume.updateMany({
@@ -163,9 +185,19 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const session = await getSessionUser();
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ success: false, error: "Missing id" }, { status: 400 });
+
+    const resume = await prisma.resume.findUnique({ where: { id } });
+    if (!resume || resume.userId !== session.profileId) {
+      return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
+    }
 
     await prisma.resume.delete({ where: { id } });
     return NextResponse.json({ success: true });

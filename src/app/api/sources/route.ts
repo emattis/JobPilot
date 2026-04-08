@@ -1,15 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 
 // ── GET: list all sources ──────────────────────────────────────────────────
 
 export async function GET() {
   try {
+    const session = await getSessionUser();
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    const profileId = session.profileId;
+
     const [companies, vcSources, profile] = await Promise.all([
-      prisma.companyWatchlist.findMany({ orderBy: { name: "asc" } }),
-      prisma.vCSource.findMany({ orderBy: { name: "asc" } }),
-      prisma.userProfile.findFirst({
+      prisma.companyWatchlist.findMany({ where: { userId: profileId }, orderBy: { name: "asc" } }),
+      prisma.vCSource.findMany({ where: { userId: profileId }, orderBy: { name: "asc" } }),
+      prisma.userProfile.findUnique({
+        where: { id: profileId },
         select: { targetRoles: true, skills: true, yearsExperience: true, preferRemote: true, industries: true, summary: true },
       }),
     ]);
@@ -60,7 +68,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { name, url, type, atsType } = addSchema.parse(body);
 
-    const profile = await prisma.userProfile.findFirst({ select: { id: true } });
+    const session = await getSessionUser();
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    const profileId = session.profileId;
+
+    const profile = await prisma.userProfile.findUnique({ where: { id: profileId }, select: { id: true } });
     if (!profile) {
       return NextResponse.json({ success: false, error: "Complete your profile first" }, { status: 400 });
     }
@@ -108,6 +122,11 @@ const patchSchema = z.object({
 
 export async function PATCH(request: NextRequest) {
   try {
+    const session = await getSessionUser();
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
     const { id, kind, active } = patchSchema.parse(body);
 
@@ -133,6 +152,11 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const session = await getSessionUser();
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     const kind = searchParams.get("kind");

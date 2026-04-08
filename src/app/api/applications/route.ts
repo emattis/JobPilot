@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 
 const createSchema = z.object({
   jobId: z.string().min(1),
@@ -10,7 +11,14 @@ const createSchema = z.object({
 
 export async function GET() {
   try {
+    const session = await getSessionUser();
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    const profileId = session.profileId;
+
     const applications = await prisma.application.findMany({
+      where: { userId: profileId },
       include: {
         job: {
           include: {
@@ -38,7 +46,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { jobId, resumeId, notes } = createSchema.parse(body);
 
-    const profile = await prisma.userProfile.findFirst();
+    const session = await getSessionUser();
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    const profileId = session.profileId;
+
+    const profile = await prisma.userProfile.findUnique({ where: { id: profileId } });
     if (!profile) {
       return NextResponse.json({ success: false, error: "No profile found" }, { status: 400 });
     }
@@ -78,8 +92,16 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Missing id" }, { status: 400 });
     }
 
+    const session = await getSessionUser();
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const app = await prisma.application.findUnique({ where: { id } });
     if (!app) {
+      return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
+    }
+    if (app.userId !== session.profileId) {
       return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
     }
 
@@ -109,8 +131,14 @@ export async function PATCH(request: NextRequest) {
 
     if (!id) return NextResponse.json({ success: false, error: "Missing id" }, { status: 400 });
 
+    const session = await getSessionUser();
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const current = await prisma.application.findUnique({ where: { id } });
     if (!current) return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
+    if (current.userId !== session.profileId) return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
 
     // Auto-set timestamp fields on first transition to key statuses
     const timestampUpdates: Record<string, Date> = {};

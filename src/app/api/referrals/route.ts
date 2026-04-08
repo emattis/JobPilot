@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 import { generateOutreachMessage } from "@/lib/ai/generate-outreach";
 
 const createSchema = z.object({
@@ -38,9 +39,17 @@ const referralInclude = {
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await getSessionUser();
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    const profileId = session.profileId;
+
     const applicationId = request.nextUrl.searchParams.get("applicationId");
 
-    const where = applicationId ? { applicationId } : {};
+    const where = applicationId
+      ? { applicationId, application: { userId: profileId } }
+      : { application: { userId: profileId } };
 
     const referrals = await prisma.referral.findMany({
       where,
@@ -62,16 +71,23 @@ export async function POST(request: NextRequest) {
     console.log("[referrals POST] incoming body:", JSON.stringify(body, null, 2));
     const input = createSchema.parse(body);
 
+    const session = await getSessionUser();
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    const profileId = session.profileId;
+
     // Load application + job for AI context
     const application = await prisma.application.findUnique({
       where: { id: input.applicationId },
       include: { job: { select: { title: true, company: true, description: true } } },
     });
-    if (!application) {
+    if (!application || application.userId !== profileId) {
       return NextResponse.json({ success: false, error: "Application not found" }, { status: 404 });
     }
 
-    const profile = await prisma.userProfile.findFirst({
+    const profile = await prisma.userProfile.findUnique({
+      where: { id: profileId },
       select: { id: true, name: true, summary: true },
     });
 
@@ -135,6 +151,11 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
+    const session = await getSessionUser();
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
     const { id, ...fields } = patchSchema.parse(body);
 
@@ -167,6 +188,11 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const session = await getSessionUser();
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const id = request.nextUrl.searchParams.get("id");
     if (!id) return NextResponse.json({ success: false, error: "Missing id" }, { status: 400 });
     await prisma.referral.delete({ where: { id } });

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 
 // Statuses that count as "responded" (any movement past APPLIED)
 const RESPONDED_STATUSES = [
@@ -26,14 +27,22 @@ const OFFER_STATUSES = ["OFFER", "ACCEPTED"];
 
 export async function GET() {
   try {
+    const session = await getSessionUser();
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    const profileId = session.profileId;
+
     const [applications, analyses] = await Promise.all([
       prisma.application.findMany({
+        where: { userId: profileId },
         include: {
           job: { select: { source: true } },
           statusHistory: { select: { toStatus: true } },
         },
       }),
       prisma.jobAnalysis.findMany({
+        where: { userId: profileId },
         select: { missingSkills: true },
       }),
     ]);

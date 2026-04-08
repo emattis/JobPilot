@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 
 const schema = z.object({
   company: z.string().min(1),
@@ -16,7 +17,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const input = schema.parse(body);
 
-    const profile = await prisma.userProfile.findFirst();
+    const session = await getSessionUser();
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    const profileId = session.profileId;
+
+    const profile = await prisma.userProfile.findUnique({ where: { id: profileId } });
     if (!profile) {
       return NextResponse.json({ success: false, error: "No profile found" }, { status: 400 });
     }

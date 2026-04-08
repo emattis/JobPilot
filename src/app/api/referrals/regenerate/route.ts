@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 import { generateOutreachMessage } from "@/lib/ai/generate-outreach";
 
 export async function POST(request: NextRequest) {
@@ -7,15 +8,23 @@ export async function POST(request: NextRequest) {
     const { id } = (await request.json()) as { id: string };
     if (!id) return NextResponse.json({ success: false, error: "Missing id" }, { status: 400 });
 
+    const session = await getSessionUser();
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    const profileId = session.profileId;
+
     const referral = await prisma.referral.findUnique({
       where: { id },
       include: {
         application: { include: { job: { select: { title: true, company: true, description: true } } } },
       },
     });
-    if (!referral) return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
+    if (!referral || referral.application.userId !== profileId) {
+      return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
+    }
 
-    const profile = await prisma.userProfile.findFirst({ select: { id: true, name: true, summary: true } });
+    const profile = await prisma.userProfile.findUnique({ where: { id: profileId }, select: { id: true, name: true, summary: true } });
 
     let resumeText: string | null = null;
     if (profile) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 import { getGeminiClient, MODEL, MAX_OUTPUT_TOKENS } from "@/lib/ai/client";
 import { parseAiObject } from "@/lib/ai/parse-json";
 
@@ -104,6 +105,11 @@ function sse(event: Record<string, unknown>): string {
 // ── GET: load a saved story by applicationId ────────────────────────────────
 
 export async function GET(request: NextRequest) {
+  const session = await getSessionUser();
+  if (!session) {
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+
   const appId = new URL(request.url).searchParams.get("applicationId");
   if (!appId) {
     return NextResponse.json({ success: false, error: "Missing applicationId" }, { status: 400 });
@@ -180,7 +186,21 @@ export async function POST(request: NextRequest) {
           return;
         }
 
-        const profile = await prisma.userProfile.findFirst();
+        const session = await getSessionUser();
+        if (!session) {
+          send({ type: "error", error: "Unauthorized" });
+          controller.close();
+          return;
+        }
+        const profileId = session.profileId;
+
+        if (application.userId !== profileId) {
+          send({ type: "error", error: "Application not found" });
+          controller.close();
+          return;
+        }
+
+        const profile = await prisma.userProfile.findUnique({ where: { id: profileId } });
         if (!profile) {
           send({ type: "error", error: "Complete your profile first." });
           controller.close();

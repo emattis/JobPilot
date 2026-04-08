@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 import { scrapeJobPosting, buildJobFromManual } from "@/lib/scrapers/job-posting";
 import { scrapeCompanySite } from "@/lib/scrapers/company-site";
 import { analyzeRole, analyzeCandidateFit } from "@/lib/ai/analyze-job";
@@ -49,8 +50,17 @@ export async function POST(request: NextRequest) {
           return;
         }
 
+        // ── Auth check ──────────────────────────────────────────────────────
+        const session = await getSessionUser();
+        if (!session) {
+          send({ type: "error", error: "Unauthorized" });
+          controller.close();
+          return;
+        }
+        const profileId = session.profileId;
+
         // ── Load profile + resume ───────────────────────────────────────────
-        const profile = await prisma.userProfile.findFirst();
+        const profile = await prisma.userProfile.findUnique({ where: { id: profileId } });
         if (!profile) {
           send({ type: "error", error: "Please complete your profile before running analysis." });
           controller.close();

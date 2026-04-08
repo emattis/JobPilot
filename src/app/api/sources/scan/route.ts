@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 import { discoverGreenhouseJobs } from "@/lib/scrapers/greenhouse-discover";
 import { discoverLeverJobs } from "@/lib/scrapers/lever-discover";
 import { batchScoreJobs } from "@/lib/ai/score-jobs";
@@ -49,7 +50,16 @@ export async function POST(request: NextRequest) {
 
         const { id, kind } = parsed.data;
 
-        const profile = await prisma.userProfile.findFirst({
+        const session = await getSessionUser();
+        if (!session) {
+          send({ type: "error", error: "Unauthorized" });
+          controller.close();
+          return;
+        }
+        const profileId = session.profileId;
+
+        const profile = await prisma.userProfile.findUnique({
+          where: { id: profileId },
           select: {
             id: true,
             targetRoles: true,
@@ -67,6 +77,7 @@ export async function POST(request: NextRequest) {
         }
 
         const existingJobs = await prisma.discoveredJob.findMany({
+          where: { userId: profileId },
           select: { url: true },
         });
         const existingUrls = new Set(existingJobs.map((j) => j.url));
@@ -105,7 +116,7 @@ export async function POST(request: NextRequest) {
 
           // Try to find companies in our watchlist that came from this VC
           const companies = await prisma.companyWatchlist.findMany({
-            where: { vcSource: source.name, active: true },
+            where: { vcSource: source.name, active: true, userId: profileId },
           });
 
           if (companies.length === 0) {

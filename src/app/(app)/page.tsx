@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { prisma } from "@/lib/db";
+import { requireAuth } from "@/lib/auth";
 import {
   Briefcase,
   Zap,
@@ -13,6 +14,8 @@ import Link from "next/link";
 import { ApplicationsTodayCard } from "@/components/metrics/ApplicationsTodayCard";
 
 async function getStats() {
+  const session = await requireAuth();
+
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const yesterdayStart = new Date(todayStart);
@@ -21,21 +24,21 @@ async function getStats() {
   weekAgoStart.setDate(weekAgoStart.getDate() - 6);
 
   const [applications, analyses, discovered, profile, recentApps] = await Promise.all([
-    prisma.application.count(),
-    prisma.jobAnalysis.count(),
-    prisma.discoveredJob.count({ where: { dismissed: false } }),
-    prisma.userProfile.findFirst({ select: { name: true } }),
+    prisma.application.count({ where: { userId: session.profileId } }),
+    prisma.jobAnalysis.count({ where: { userId: session.profileId } }),
+    prisma.discoveredJob.count({ where: { dismissed: false, userId: session.profileId } }),
+    prisma.userProfile.findUnique({ where: { id: session.profileId }, select: { name: true } }),
     prisma.application.findMany({
-      where: { appliedAt: { gte: weekAgoStart } },
+      where: { userId: session.profileId, appliedAt: { gte: weekAgoStart } },
       select: { appliedAt: true },
     }),
   ]);
 
   const applied = await prisma.application.count({
-    where: { appliedAt: { not: null } },
+    where: { userId: session.profileId, appliedAt: { not: null } },
   });
   const responded = await prisma.application.count({
-    where: { responseAt: { not: null } },
+    where: { userId: session.profileId, responseAt: { not: null } },
   });
 
   // Count apps per day for the last 7 days

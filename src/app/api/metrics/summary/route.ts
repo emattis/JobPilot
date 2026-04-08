@@ -1,22 +1,30 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 import { getGeminiClient, MODEL } from "@/lib/ai/client";
 import { subDays } from "date-fns";
 
 export async function GET() {
   try {
+    const session = await getSessionUser();
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    const profileId = session.profileId;
+
     const sevenDaysAgo = subDays(new Date(), 7);
 
     const [recentApps, allApps, recentAnalyses] = await Promise.all([
       prisma.application.findMany({
-        where: { createdAt: { gte: sevenDaysAgo } },
+        where: { userId: profileId, createdAt: { gte: sevenDaysAgo } },
         include: { job: { select: { title: true, company: true } } },
       }),
       prisma.application.findMany({
+        where: { userId: profileId },
         select: { status: true, appliedAt: true, createdAt: true },
       }),
       prisma.jobAnalysis.findMany({
-        where: { createdAt: { gte: sevenDaysAgo } },
+        where: { userId: profileId, createdAt: { gte: sevenDaysAgo } },
         select: { missingSkills: true, overallFitScore: true },
       }),
     ]);

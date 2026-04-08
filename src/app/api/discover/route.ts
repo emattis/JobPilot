@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 import { discoverGreenhouseJobs } from "@/lib/scrapers/greenhouse-discover";
 import { discoverLeverJobs } from "@/lib/scrapers/lever-discover";
 import { batchScoreJobs } from "@/lib/ai/score-jobs";
@@ -30,12 +31,18 @@ function matchesLocation(
 
 export async function GET() {
   try {
+    const session = await getSessionUser();
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    const profileId = session.profileId;
+
     const [rawJobs, profile] = await Promise.all([
       prisma.discoveredJob.findMany({
-        where: { dismissed: false },
+        where: { dismissed: false, userId: profileId },
         orderBy: [{ relevanceScore: "desc" }, { savedAt: "desc" }],
       }),
-      prisma.userProfile.findFirst({ select: { preferredLocations: true } }),
+      prisma.userProfile.findUnique({ where: { id: profileId }, select: { preferredLocations: true } }),
     ]);
 
     const preferredLocations = profile?.preferredLocations ?? [];
@@ -58,6 +65,11 @@ export async function GET() {
 
 export async function PATCH(request: NextRequest) {
   try {
+    const session = await getSessionUser();
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const { id, dismissed } = (await request.json()) as {
       id: string;
       dismissed: boolean;
@@ -65,6 +77,12 @@ export async function PATCH(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ success: false, error: "Missing id" }, { status: 400 });
     }
+
+    const job = await prisma.discoveredJob.findUnique({ where: { id } });
+    if (!job || job.userId !== session.profileId) {
+      return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
+    }
+
     const updated = await prisma.discoveredJob.update({
       where: { id },
       data: { dismissed },
@@ -90,8 +108,17 @@ export async function POST() {
         controller.enqueue(encoder.encode(sse(event)));
 
       try {
+        // ── Auth check ────────────────────────────────────────────────────
+        const session = await getSessionUser();
+        if (!session) {
+          send({ type: "error", error: "Unauthorized" });
+          controller.close();
+          return;
+        }
+        const profileId = session.profileId;
+
         // ── Load profile ───────────────────────────────────────────────────
-        const profile = await prisma.userProfile.findFirst();
+        const profile = await prisma.userProfile.findUnique({ where: { id: profileId } });
         if (!profile) {
           send({ type: "error", error: "Complete your profile first." });
           controller.close();
@@ -104,12 +131,14 @@ export async function POST() {
 
         // ── Load existing DB state ─────────────────────────────────────────
         const existingJobs = await prisma.discoveredJob.findMany({
+          where: { userId: profileId },
           select: { id: true, url: true, relevanceScore: true },
         });
         const existingByUrl = new Map(existingJobs.map((j) => [j.url, j]));
 
         // Jobs that need re-scoring: previously failed (score = 0/null, or "Could not score")
         const existingWithReasoning = await prisma.discoveredJob.findMany({
+          where: { userId: profileId },
           select: { url: true, relevanceScore: true, reasoning: true },
         });
         const staleUrls = new Set(
@@ -165,7 +194,7 @@ export async function POST() {
         if (newJobsToScore.length === 0) {
           // Nothing new or stale — just return the current feed
           const allRaw = await prisma.discoveredJob.findMany({
-            where: { dismissed: false },
+            where: { dismissed: false, userId: profileId },
             orderBy: [{ relevanceScore: "desc" }, { savedAt: "desc" }],
           });
           const preferredLocations = profile.preferredLocations ?? [];
@@ -228,7 +257,7 @@ export async function POST() {
 
         // Return full feed sorted by score, filtered by location preference
         const allRaw = await prisma.discoveredJob.findMany({
-          where: { dismissed: false },
+          where: { dismissed: false, userId: profileId },
           orderBy: [{ relevanceScore: "desc" }, { savedAt: "desc" }],
         });
         const preferredLocations = profile.preferredLocations ?? [];

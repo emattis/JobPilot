@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
-import { SESSION_COOKIE } from "@/lib/auth";
+import { getSessionUser, SESSION_COOKIE } from "@/lib/auth";
 
 const profileSchema = z.object({
   name: z.string().min(1),
@@ -26,8 +26,14 @@ const profileSchema = z.object({
 
 export async function GET() {
   try {
-    const profile = await prisma.userProfile.findFirst();
-    return NextResponse.json({ success: true, data: profile });
+    const session = await getSessionUser();
+    if (session) {
+      const profile = await prisma.userProfile.findUnique({ where: { id: session.profileId } });
+      return NextResponse.json({ success: true, data: profile });
+    }
+    // No session with profile yet — check if any profile exists for the auth user
+    // This handles the case before a profile is created
+    return NextResponse.json({ success: true, data: null });
   } catch {
     return NextResponse.json(
       { success: false, error: "Failed to fetch profile" },
@@ -41,7 +47,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const data = profileSchema.parse(body);
 
-    const existing = await prisma.userProfile.findFirst();
+    const session = await getSessionUser();
+    const existing = session
+      ? await prisma.userProfile.findUnique({ where: { id: session.profileId } })
+      : null;
 
     const profile = existing
       ? await prisma.userProfile.update({

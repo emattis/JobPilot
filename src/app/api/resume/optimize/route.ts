@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 import { optimizeResume } from "@/lib/ai/resume-optimize";
 
 function sse(event: Record<string, unknown>): string {
@@ -27,9 +28,16 @@ export async function POST(request: NextRequest) {
         controller.enqueue(encoder.encode(sse(event)));
 
       try {
+        const session = await getSessionUser();
+        if (!session) {
+          send({ type: "error", error: "Unauthorized" });
+          controller.close();
+          return;
+        }
+
         // Load resume
         const resume = await prisma.resume.findUnique({ where: { id: resumeId } });
-        if (!resume) {
+        if (!resume || resume.userId !== session.profileId) {
           send({ type: "error", error: "Resume not found" });
           controller.close();
           return;
@@ -49,7 +57,7 @@ export async function POST(request: NextRequest) {
             },
           },
         });
-        if (!application) {
+        if (!application || application.userId !== session.profileId) {
           send({ type: "error", error: "Application not found" });
           controller.close();
           return;
@@ -85,6 +93,11 @@ export async function POST(request: NextRequest) {
 // GET /api/resume/optimize?resumeId=xxx
 // Returns the rawText of a resume (for preview)
 export async function GET(request: NextRequest) {
+  const session = await getSessionUser();
+  if (!session) {
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+
   const resumeId = request.nextUrl.searchParams.get("resumeId");
   if (!resumeId) {
     return NextResponse.json({ success: false, error: "Missing resumeId" }, { status: 400 });
@@ -92,9 +105,9 @@ export async function GET(request: NextRequest) {
   try {
     const resume = await prisma.resume.findUnique({
       where: { id: resumeId },
-      select: { id: true, name: true, rawText: true },
+      select: { id: true, name: true, rawText: true, userId: true },
     });
-    if (!resume) return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
+    if (!resume || resume.userId !== session.profileId) return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
     return NextResponse.json({ success: true, data: resume });
   } catch {
     return NextResponse.json({ success: false, error: "Failed to fetch" }, { status: 500 });

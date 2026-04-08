@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 import { generateResumePDF } from "@/lib/pdf/generate-resume";
 
 // POST /api/resume/generate-pdf
@@ -9,13 +10,18 @@ import { generateResumePDF } from "@/lib/pdf/generate-resume";
 // Generates a PDF from the resume's rawText, saves it, updates fileUrl, returns the resume.
 export async function POST(request: NextRequest) {
   try {
+    const session = await getSessionUser();
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const { id } = (await request.json()) as { id: string };
     if (!id) {
       return NextResponse.json({ success: false, error: "Missing id" }, { status: 400 });
     }
 
     const resume = await prisma.resume.findUnique({ where: { id } });
-    if (!resume) {
+    if (!resume || resume.userId !== session.profileId) {
       return NextResponse.json({ success: false, error: "Resume not found" }, { status: 404 });
     }
 
