@@ -7,8 +7,30 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  profile  UserProfile?
+  sessions Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
 model UserProfile {
   id              String   @id @default(cuid())
+  authUserId      String   @unique
+  authUser        User     @relation(fields: [authUserId], references: [id], onDelete: Cascade)
   name            String
   email           String
   phone           String?
@@ -29,10 +51,14 @@ model UserProfile {
   createdAt           DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  resumes      Resume[]
-  experiences  Experience[]
-  education    Education[]
-  applications Application[]
+  resumes          Resume[]
+  experiences      Experience[]
+  education        Education[]
+  applications     Application[]
+  jobAnalyses      JobAnalysis[]
+  discoveredJobs   DiscoveredJob[]
+  companyWatchlist  CompanyWatchlist[]
+  vcSources        VCSource[]
 }
 
 model Resume {
@@ -103,9 +129,11 @@ model JobPosting {
 }
 
 model JobAnalysis {
-  id      String     @id @default(cuid())
-  jobId   String
-  job     JobPosting @relation(fields: [jobId], references: [id])
+  id       String      @id @default(cuid())
+  jobId    String
+  job      JobPosting  @relation(fields: [jobId], references: [id])
+  userId   String
+  user     UserProfile @relation(fields: [userId], references: [id])
   resumeId String?
 
   overallFitScore      Int
@@ -196,8 +224,8 @@ model Referral {
   contactCompany String?
   contactLinkedin String?
   outreachType   OutreachType   @default(WARM_INTRO)
-  relationship   String         @db.Text   // how I know them / connection context
-  messageTemplate String?       @db.Text   // AI-generated outreach draft
+  relationship   String         @db.Text
+  messageTemplate String?       @db.Text
   messageSentAt  DateTime?
   responseReceivedAt DateTime?
   referralMade   Boolean        @default(false)
@@ -239,11 +267,13 @@ model Story {
 
 model CompanyWatchlist {
   id          String    @id @default(cuid())
+  userId      String
+  user        UserProfile @relation(fields: [userId], references: [id])
   name        String
   slug        String
-  atsType     String    // greenhouse, lever, ashby, workday, custom
+  atsType     String
   careerUrl   String
-  vcSource    String?   // Which VC portfolio this came from
+  vcSource    String?
   active      Boolean   @default(true)
   lastScanned DateTime?
   jobsFound   Int       @default(0)
@@ -252,9 +282,11 @@ model CompanyWatchlist {
 
 model VCSource {
   id             String    @id @default(cuid())
+  userId         String
+  user           UserProfile @relation(fields: [userId], references: [id])
   name           String
   portfolioUrl   String
-  scraperType    String    // vc_portfolio, job_board, ats_board
+  scraperType    String
   active         Boolean   @default(true)
   lastScanned    DateTime?
   companiesFound Int       @default(0)
@@ -264,6 +296,8 @@ model VCSource {
 
 model DiscoveredJob {
   id             String   @id @default(cuid())
+  userId         String
+  user           UserProfile @relation(fields: [userId], references: [id])
   url            String   @unique
   title          String
   company        String

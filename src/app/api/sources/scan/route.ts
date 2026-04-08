@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
 
         const profile = await prisma.userProfile.findFirst({
           select: {
+            id: true,
             targetRoles: true,
             skills: true,
             yearsExperience: true,
@@ -164,6 +165,7 @@ export async function POST(request: NextRequest) {
               prisma.discoveredJob.upsert({
                 where: { url: job.url },
                 create: {
+                  userId: profile.id,
                   url: job.url,
                   title: job.title,
                   company: job.company,

@@ -1,21 +1,13 @@
 "use client";
 
-import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2, Lock } from "lucide-react";
+import { Loader2, UserPlus } from "lucide-react";
 
-export default function LoginPage() {
-  return (
-    <Suspense>
-      <LoginForm />
-    </Suspense>
-  );
-}
-
-function LoginForm() {
+export default function RegisterPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -27,21 +19,20 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth", {
+      const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ name, email, password }),
       });
 
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        setError(data.error ?? "Invalid email or password");
+        setError(data.error ?? "Failed to create account");
         return;
       }
 
-      const from = searchParams.get("from") ?? "/";
-      router.push(from);
+      router.push("/");
       router.refresh();
     } catch {
       setError("Something went wrong. Please try again.");
@@ -53,20 +44,35 @@ function LoginForm() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
-        {/* Logo / Title */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 mb-4">
-            <Lock className="w-7 h-7 text-primary" />
+            <UserPlus className="w-7 h-7 text-primary" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">JobPilot</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Create Account</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Your AI-powered job search command center
+            Set up your JobPilot account
           </p>
         </div>
 
-        {/* Login Card */}
         <div className="rounded-xl border bg-card p-6 shadow-sm">
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <label htmlFor="name" className="text-sm font-medium leading-none">
+                Name
+              </label>
+              <input
+                id="name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Your full name"
+                autoComplete="name"
+                autoFocus
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={loading}
+              />
+            </div>
+
             <div className="space-y-1.5">
               <label htmlFor="email" className="text-sm font-medium leading-none">
                 Email
@@ -78,7 +84,6 @@ function LoginForm() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 autoComplete="email"
-                autoFocus
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={loading}
               />
@@ -93,8 +98,8 @@ function LoginForm() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                autoComplete="current-password"
+                placeholder="At least 8 characters"
+                autoComplete="new-password"
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={loading}
               />
@@ -106,25 +111,25 @@ function LoginForm() {
 
             <button
               type="submit"
-              disabled={loading || !email || !password}
+              disabled={loading || !name || !email || !password}
               className="inline-flex items-center justify-center w-full h-10 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground ring-offset-background transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
             >
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Signing in...
+                  Creating account...
                 </>
               ) : (
-                "Sign in"
+                "Create account"
               )}
             </button>
           </form>
 
           <div className="mt-4 text-center">
             <p className="text-sm text-muted-foreground">
-              Don&apos;t have an account?{" "}
-              <Link href="/register" className="text-primary hover:underline font-medium">
-                Sign up
+              Already have an account?{" "}
+              <Link href="/login" className="text-primary hover:underline font-medium">
+                Sign in
               </Link>
             </p>
           </div>

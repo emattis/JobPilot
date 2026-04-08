@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
+import { SESSION_COOKIE } from "@/lib/auth";
 
 const profileSchema = z.object({
   name: z.string().min(1),
@@ -51,14 +53,22 @@ export async function POST(request: NextRequest) {
             maxSalary: data.maxSalary ?? null,
           },
         })
-      : await prisma.userProfile.create({
-          data: {
-            ...data,
-            yearsExperience: data.yearsExperience ?? null,
-            minSalary: data.minSalary ?? null,
-            maxSalary: data.maxSalary ?? null,
-          },
-        });
+      : await (async () => {
+          const cookieStore = await cookies();
+          const token = cookieStore.get(SESSION_COOKIE)?.value;
+          if (!token) throw new Error("Not authenticated");
+          const session = await prisma.session.findUnique({ where: { token } });
+          if (!session || session.expiresAt < new Date()) throw new Error("Not authenticated");
+          return prisma.userProfile.create({
+            data: {
+              ...data,
+              authUserId: session.userId,
+              yearsExperience: data.yearsExperience ?? null,
+              minSalary: data.minSalary ?? null,
+              maxSalary: data.maxSalary ?? null,
+            },
+          });
+        })();
 
     return NextResponse.json({ success: true, data: profile });
   } catch (error) {

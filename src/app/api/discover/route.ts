@@ -199,6 +199,7 @@ export async function POST() {
             prisma.discoveredJob.upsert({
               where: { url: job.url },
               create: {
+                userId: profile.id,
                 url: job.url,
                 title: job.title,
                 company: job.company,

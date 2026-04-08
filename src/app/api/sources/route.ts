@@ -60,9 +60,15 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { name, url, type, atsType } = addSchema.parse(body);
 
+    const profile = await prisma.userProfile.findFirst({ select: { id: true } });
+    if (!profile) {
+      return NextResponse.json({ success: false, error: "Complete your profile first" }, { status: 400 });
+    }
+
     if (type === "vc_portfolio" || type === "job_board") {
       const source = await prisma.vCSource.create({
         data: {
+          userId: profile.id,
           name,
           portfolioUrl: url,
           scraperType: type,
@@ -74,6 +80,7 @@ export async function POST(request: NextRequest) {
       const slug = slugFromUrl(url, name);
       const source = await prisma.companyWatchlist.create({
         data: {
+          userId: profile.id,
           name,
           slug,
           atsType: detectedAts,

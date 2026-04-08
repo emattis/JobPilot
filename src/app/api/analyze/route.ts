@@ -221,6 +221,7 @@ export async function POST(request: NextRequest) {
 
         const analysis = await prisma.jobAnalysis.create({
           data: {
+            userId: profile.id,
             jobId: existingJobPosting.id,
             overallFitScore: result.overallFitScore,
             skillMatchScore: result.skillMatchScore,
