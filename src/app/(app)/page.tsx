@@ -12,11 +12,22 @@ import {
 import Link from "next/link";
 
 async function getStats() {
-  const [applications, analyses, discovered, profile] = await Promise.all([
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterdayStart = new Date(todayStart);
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+  const weekAgoStart = new Date(todayStart);
+  weekAgoStart.setDate(weekAgoStart.getDate() - 6);
+
+  const [applications, analyses, discovered, profile, recentApps] = await Promise.all([
     prisma.application.count(),
     prisma.jobAnalysis.count(),
     prisma.discoveredJob.count({ where: { dismissed: false } }),
     prisma.userProfile.findFirst({ select: { name: true } }),
+    prisma.application.findMany({
+      where: { appliedAt: { gte: weekAgoStart } },
+      select: { appliedAt: true },
+    }),
   ]);
 
   const applied = await prisma.application.count({
@@ -26,12 +37,33 @@ async function getStats() {
     where: { responseAt: { not: null } },
   });
 
+  // Count apps per day for the last 7 days
+  const dailyCounts: number[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const dayStart = new Date(todayStart);
+    dayStart.setDate(dayStart.getDate() - i);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+    const count = recentApps.filter((a) => {
+      if (!a.appliedAt) return false;
+      const d = new Date(a.appliedAt);
+      return d >= dayStart && d < dayEnd;
+    }).length;
+    dailyCounts.push(count);
+  }
+
+  const todayCount = dailyCounts[6];
+  const yesterdayCount = dailyCounts[5];
+
   return {
     applications,
     analyses,
     discovered,
     responseRate: applied > 0 ? Math.round((responded / applied) * 100) : 0,
     profileName: profile?.name ?? null,
+    todayCount,
+    yesterdayCount,
+    dailyCounts,
   };
 }
 
@@ -51,6 +83,50 @@ export default async function DashboardPage() {
         </h1>
         <p className="text-muted-foreground mt-1 text-sm">
           Here&apos;s your job search at a glance.
+        </p>
+      </div>
+
+      {/* Applications Today */}
+      <div className="rounded-xl border border-border bg-card p-5 mb-6">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+              Applications Today
+            </p>
+            <div className="flex items-baseline gap-3">
+              <span className="text-4xl font-bold font-mono tracking-tight">
+                {stats.todayCount}
+              </span>
+              <span className="text-sm text-muted-foreground">
+                Yesterday: {stats.yesterdayCount}
+              </span>
+            </div>
+          </div>
+          {/* 7-day sparkline */}
+          <div className="flex items-end gap-1 h-10 shrink-0">
+            {stats.dailyCounts.map((count, i) => {
+              const max = Math.max(...stats.dailyCounts, 1);
+              const height = Math.max(4, Math.round((count / max) * 40));
+              const isToday = i === 6;
+              return (
+                <div
+                  key={i}
+                  className={`w-5 rounded-sm transition-all ${
+                    isToday
+                      ? "bg-primary"
+                      : count > 0
+                      ? "bg-primary/30"
+                      : "bg-muted"
+                  }`}
+                  style={{ height: `${height}px` }}
+                  title={`${count} app${count !== 1 ? "s" : ""}`}
+                />
+              );
+            })}
+          </div>
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-2">
+          Last 7 days
         </p>
       </div>
 

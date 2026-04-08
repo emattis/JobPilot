@@ -124,6 +124,23 @@ export async function GET() {
       .sort((a, b) => b.count - a.count)
       .slice(0, 15);
 
+    // ── Daily activity (last 7 days) ──────────────────────────────────────
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dailyActivity: { day: string; count: number }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const dayStart = new Date(todayStart);
+      dayStart.setDate(dayStart.getDate() - i);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+      const count = applied.filter((a) => {
+        if (!a.appliedAt) return false;
+        const d = new Date(a.appliedAt);
+        return d >= dayStart && d < dayEnd;
+      }).length;
+      dailyActivity.push({ day: dayStart.toISOString().slice(0, 10), count });
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -141,6 +158,7 @@ export async function GET() {
         appsPerWeek,
         sourceEffectiveness,
         skillGaps,
+        dailyActivity,
       },
     });
   } catch (err) {
