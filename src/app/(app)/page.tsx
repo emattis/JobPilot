@@ -10,6 +10,7 @@ import {
   Clock,
 } from "lucide-react";
 import Link from "next/link";
+import { ApplicationsTodayCard } from "@/components/metrics/ApplicationsTodayCard";
 
 async function getStats() {
   const now = new Date();
@@ -87,47 +88,12 @@ export default async function DashboardPage() {
       </div>
 
       {/* Applications Today */}
-      <div className="rounded-xl border border-border bg-card p-5 mb-6">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-              Applications Today
-            </p>
-            <div className="flex items-baseline gap-3">
-              <span className="text-4xl font-bold font-mono tracking-tight">
-                {stats.todayCount}
-              </span>
-              <span className="text-sm text-muted-foreground">
-                Yesterday: {stats.yesterdayCount}
-              </span>
-            </div>
-          </div>
-          {/* 7-day sparkline */}
-          <div className="flex items-end gap-1 h-10 shrink-0">
-            {stats.dailyCounts.map((count, i) => {
-              const max = Math.max(...stats.dailyCounts, 1);
-              const height = Math.max(4, Math.round((count / max) * 40));
-              const isToday = i === 6;
-              return (
-                <div
-                  key={i}
-                  className={`w-5 rounded-sm transition-all ${
-                    isToday
-                      ? "bg-primary"
-                      : count > 0
-                      ? "bg-primary/30"
-                      : "bg-muted"
-                  }`}
-                  style={{ height: `${height}px` }}
-                  title={`${count} app${count !== 1 ? "s" : ""}`}
-                />
-              );
-            })}
-          </div>
-        </div>
-        <p className="text-[11px] text-muted-foreground mt-2">
-          Last 7 days
-        </p>
+      <div className="mb-6">
+        <ApplicationsTodayCard
+          todayCount={stats.todayCount}
+          yesterdayCount={stats.yesterdayCount}
+          dailyCounts={stats.dailyCounts}
+        />
       </div>
 
       {/* Stat Cards */}

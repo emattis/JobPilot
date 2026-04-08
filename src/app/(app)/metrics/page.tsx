@@ -12,6 +12,7 @@ import {
   Sparkles,
   AlertTriangle,
 } from "lucide-react";
+import { ApplicationsTodayCard } from "@/components/metrics/ApplicationsTodayCard";
 import {
   BarChart,
   Bar,
@@ -233,50 +234,11 @@ export default function MetricsPage() {
       </div>
 
       {/* Applications Today */}
-      <div className="rounded-xl border border-border bg-card p-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-              Applications Today
-            </p>
-            <div className="flex items-baseline gap-3">
-              <span className="text-4xl font-bold font-mono tracking-tight">
-                {todayCount}
-              </span>
-              <span className="text-sm text-muted-foreground">
-                Yesterday: {yesterdayCount}
-              </span>
-            </div>
-          </div>
-          {/* 7-day bar chart */}
-          <div className="flex items-end gap-1.5 h-12 shrink-0">
-            {dailyActivity.map((d, i) => {
-              const max = Math.max(...dailyActivity.map((x) => x.count), 1);
-              const height = Math.max(4, Math.round((d.count / max) * 48));
-              const isToday = i === dailyActivity.length - 1;
-              return (
-                <div key={d.day} className="flex flex-col items-center gap-1">
-                  <div
-                    className={`w-6 rounded-sm transition-all ${
-                      isToday
-                        ? "bg-primary"
-                        : d.count > 0
-                        ? "bg-primary/30"
-                        : "bg-muted"
-                    }`}
-                    style={{ height: `${height}px` }}
-                    title={`${format(parseISO(d.day), "EEE")}: ${d.count}`}
-                  />
-                  <span className="text-[9px] text-muted-foreground/60">
-                    {format(parseISO(d.day), "E").charAt(0)}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        <p className="text-[11px] text-muted-foreground mt-2">Last 7 days</p>
-      </div>
+      <ApplicationsTodayCard
+        todayCount={todayCount}
+        yesterdayCount={yesterdayCount}
+        dailyCounts={dailyActivity.map((d) => d.count)}
+      />
 
       {/* AI Weekly Summary */}
       <div className="rounded-xl border border-border bg-card p-5">
