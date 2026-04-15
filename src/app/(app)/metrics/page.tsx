@@ -11,6 +11,8 @@ import {
   Loader2,
   Sparkles,
   AlertTriangle,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { ApplicationsTodayCard } from "@/components/metrics/ApplicationsTodayCard";
 import {
@@ -65,6 +67,12 @@ interface SkillGap {
   count: number;
 }
 
+interface SkillBucket {
+  name: string;
+  jobCount: number;
+  skills: string[];
+}
+
 interface DailyActivity {
   day: string;
   count: number;
@@ -76,6 +84,7 @@ interface MetricsData {
   appsPerWeek: WeekData[];
   sourceEffectiveness: SourceData[];
   skillGaps: SkillGap[];
+  skillBuckets: SkillBucket[];
   dailyActivity: DailyActivity[];
 }
 
@@ -179,7 +188,7 @@ export default function MetricsPage() {
     );
   }
 
-  const { stats, funnel, appsPerWeek, sourceEffectiveness, skillGaps, dailyActivity } = metrics;
+  const { stats, funnel, appsPerWeek, sourceEffectiveness, skillBuckets, dailyActivity } = metrics;
   const todayCount = dailyActivity[dailyActivity.length - 1]?.count ?? 0;
   const yesterdayCount = dailyActivity[dailyActivity.length - 2]?.count ?? 0;
 
@@ -414,47 +423,71 @@ export default function MetricsPage() {
           )}
         </div>
 
-        {/* Skill gap analysis */}
+        {/* Skill gap analysis — AI-bucketed */}
         <div className="rounded-xl border border-border bg-card p-5">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-2">
             <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
             Top Skill Gaps
           </h2>
-          {skillGaps.length === 0 ? (
+          {skillBuckets.length === 0 ? (
             <EmptyChart message="Analyze more jobs to see skill gaps" />
           ) : (
-            <div className="space-y-2.5">
-              {skillGaps.map((gap, i) => {
-                const maxCount = skillGaps[0].count;
-                const pct = Math.round((gap.count / maxCount) * 100);
-                return (
-                  <div key={gap.skill} className="flex items-center gap-3">
-                    <span className="text-xs text-muted-foreground w-4 text-right shrink-0">
-                      {i + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium capitalize truncate">
-                          {gap.skill}
-                        </span>
-                        <span className="text-xs text-muted-foreground shrink-0 ml-2">
-                          {gap.count} job{gap.count !== 1 ? "s" : ""}
-                        </span>
-                      </div>
-                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-amber-400/70 rounded-full transition-all"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="space-y-3">
+              {skillBuckets.map((bucket) => (
+                <SkillBucketCard key={bucket.name} bucket={bucket} maxCount={skillBuckets[0].jobCount} />
+              ))}
             </div>
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function SkillBucketCard({ bucket, maxCount }: { bucket: SkillBucket; maxCount: number }) {
+  const [open, setOpen] = useState(false);
+  const pct = Math.round((bucket.jobCount / Math.max(maxCount, 1)) * 100);
+
+  return (
+    <div className="rounded-lg border border-border/50 overflow-hidden">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.02] transition-colors text-left"
+      >
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-sm font-semibold truncate">{bucket.name}</span>
+            <span className="text-xs text-muted-foreground shrink-0 ml-2">
+              {bucket.jobCount} job{bucket.jobCount !== 1 ? "s" : ""}
+            </span>
+          </div>
+          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full bg-amber-400/70 rounded-full transition-all"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        </div>
+        {open ? (
+          <ChevronUp className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        ) : (
+          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        )}
+      </button>
+      {open && (
+        <div className="px-3 pb-2.5 border-t border-border/30">
+          <div className="flex flex-wrap gap-1.5 pt-2">
+            {bucket.skills.map((skill) => (
+              <span
+                key={skill}
+                className="text-[10px] px-2 py-0.5 rounded-full border border-amber-500/20 bg-amber-500/5 text-amber-400 capitalize"
+              >
+                {skill}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
