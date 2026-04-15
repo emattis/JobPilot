@@ -114,13 +114,24 @@ export default function TrackerPage() {
     if (json.success) {
       await fetchApps();
     }
+    return json;
   }
 
   const handleStatusChange = useCallback(async (id: string, status: AppStatus) => {
     setApplications((prev) =>
       prev.map((a) => (a.id === id ? { ...a, status } : a))
     );
-    await patchApp(id, { status });
+    const result = await patchApp(id, { status });
+    if (result?.calendarEvent) {
+      toast.success(
+        <span>
+          Interview prep event created.{" "}
+          <a href={result.calendarEvent.url} target="_blank" rel="noopener noreferrer" className="underline font-medium">
+            View in Calendar
+          </a>
+        </span>
+      );
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleNotesChange = useCallback(async (id: string, notes: string) => {

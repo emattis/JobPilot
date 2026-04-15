@@ -192,7 +192,33 @@ export async function PATCH(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ success: true, data: updated });
+    // Auto-create calendar event for interview stages
+    let calendarEvent: { eventId: string; url: string } | null = null;
+    const calendarStatuses = ["PHONE_INTERVIEW", "TECHNICAL_INTERVIEW", "ONSITE_INTERVIEW", "FINAL_ROUND"];
+    if (status && calendarStatuses.includes(status) && !updated.calendarEventId) {
+      try {
+        const calRes = await fetch(
+          `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/api/integrations/calendar`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Cookie: request.headers.get("cookie") ?? "",
+            },
+            body: JSON.stringify({ applicationId: id }),
+          }
+        );
+        const calData = await calRes.json();
+        if (calData.success && !calData.duplicate) {
+          calendarEvent = { eventId: calData.eventId, url: calData.url };
+        }
+      } catch (err) {
+        // Don't break the status change flow
+        console.error("[applications PATCH] Calendar event creation failed:", err);
+      }
+    }
+
+    return NextResponse.json({ success: true, data: updated, calendarEvent });
   } catch {
     return NextResponse.json({ success: false, error: "Failed to update" }, { status: 500 });
   }

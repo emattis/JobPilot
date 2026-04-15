@@ -171,10 +171,11 @@ model Application {
   resumeId String?
   resume   Resume?     @relation(fields: [resumeId], references: [id])
 
-  status       ApplicationStatus @default(BOOKMARKED)
-  appliedAt    DateTime?
-  responseAt   DateTime?
-  interviewAt  DateTime?
+  status          ApplicationStatus @default(BOOKMARKED)
+  calendarEventId String?
+  appliedAt       DateTime?
+  responseAt      DateTime?
+  interviewAt     DateTime?
   notes        String?   @db.Text
   followUpDate DateTime?
 

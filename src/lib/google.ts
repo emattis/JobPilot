@@ -76,6 +76,12 @@ export async function getSheetsClient(authUserId: string) {
   return google.sheets({ version: "v4", auth: client });
 }
 
+export async function getCalendarClient(authUserId: string) {
+  const client = await getAuthenticatedClient(authUserId);
+  if (!client) return null;
+  return google.calendar({ version: "v3", auth: client });
+}
+
 export async function sendGmail(
   authUserId: string,
   to: string,
