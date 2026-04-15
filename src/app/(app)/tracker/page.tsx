@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { LayoutGrid, List, Plus, Upload } from "lucide-react";
+import { LayoutGrid, List, Plus, Upload, Sheet, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { KanbanBoard } from "@/components/tracker/KanbanBoard";
 import { TableView } from "@/components/tracker/TableView";
 import { DetailPanel } from "@/components/tracker/DetailPanel";
@@ -44,6 +45,41 @@ export default function TrackerPage() {
   const [showImport, setShowImport] = useState(false);
   const [showAddApp, setShowAddApp] = useState(false);
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
+  const [syncing, setSyncing] = useState(false);
+
+  async function handleSyncSheets() {
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/integrations/sheets", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.code === "GOOGLE_NOT_CONNECTED") {
+          // Initiate Google OAuth
+          const authRes = await fetch("/api/auth/google", { method: "POST" });
+          const authData = await authRes.json();
+          if (authData.success && authData.url) {
+            window.location.href = authData.url;
+            return;
+          }
+          toast.error("Failed to connect Google");
+          return;
+        }
+        throw new Error(data.error || "Sync failed");
+      }
+      toast.success(
+        <span>
+          Synced {data.count} applications.{" "}
+          <a href={data.url} target="_blank" rel="noopener noreferrer" className="underline font-medium">
+            Open Sheet
+          </a>
+        </span>
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   // ── Fetch ────────────────────────────────────────────────────────────────────
   const fetchApps = useCallback(async () => {
@@ -228,6 +264,14 @@ export default function TrackerPage() {
               >
                 <Upload className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Import</span>
+              </button>
+              <button
+                onClick={handleSyncSheets}
+                disabled={syncing}
+                className="flex items-center gap-1.5 h-8 px-3 rounded-md border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+              >
+                {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sheet className="w-3.5 h-3.5" />}
+                <span className="hidden sm:inline">Sync Sheets</span>
               </button>
               <div className="flex rounded-md border border-border overflow-hidden">
                 <button

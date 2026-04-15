@@ -14,12 +14,16 @@ export function getAuthUrl(state: string): string {
   return client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
-    scope: ["https://www.googleapis.com/auth/gmail.send"],
+    scope: [
+      "https://www.googleapis.com/auth/gmail.send",
+      "https://www.googleapis.com/auth/spreadsheets",
+      "https://www.googleapis.com/auth/drive.file",
+    ],
     state,
   });
 }
 
-export async function getGmailClient(authUserId: string) {
+async function getAuthenticatedClient(authUserId: string) {
   const user = await prisma.user.findUnique({
     where: { id: authUserId },
     select: {
@@ -40,7 +44,6 @@ export async function getGmailClient(authUserId: string) {
     expiry_date: user.googleTokenExpiry?.getTime(),
   });
 
-  // Auto-refresh if expired
   client.on("tokens", async (tokens) => {
     await prisma.user.update({
       where: { id: authUserId },
@@ -53,7 +56,19 @@ export async function getGmailClient(authUserId: string) {
     });
   });
 
+  return client;
+}
+
+export async function getGmailClient(authUserId: string) {
+  const client = await getAuthenticatedClient(authUserId);
+  if (!client) return null;
   return google.gmail({ version: "v1", auth: client });
+}
+
+export async function getSheetsClient(authUserId: string) {
+  const client = await getAuthenticatedClient(authUserId);
+  if (!client) return null;
+  return google.sheets({ version: "v4", auth: client });
 }
 
 export async function sendGmail(
