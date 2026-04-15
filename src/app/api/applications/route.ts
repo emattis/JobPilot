@@ -148,7 +148,12 @@ export async function PATCH(request: NextRequest) {
     if (status && status !== current.status) {
       const now = new Date();
 
-      if (status === "APPLIED" && !current.appliedAt) {
+      // Any status at or past APPLIED implies the user applied
+      const appliedAndBeyond = [
+        "APPLIED", "SCREENING", "PHONE_INTERVIEW", "TECHNICAL_INTERVIEW",
+        "ONSITE_INTERVIEW", "FINAL_ROUND", "OFFER", "ACCEPTED", "REJECTED",
+      ];
+      if (appliedAndBeyond.includes(status) && !current.appliedAt) {
         timestampUpdates.appliedAt = now;
       }
 

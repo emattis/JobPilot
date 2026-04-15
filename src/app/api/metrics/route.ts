@@ -48,7 +48,14 @@ export async function GET() {
     ]);
 
     // ── Stat cards ────────────────────────────────────────────────────────────
-    const applied = applications.filter((a) => a.appliedAt);
+    // Count as "applied" if appliedAt is set OR status is at/past APPLIED
+    const APPLIED_AND_BEYOND = new Set([
+      "APPLIED", "SCREENING", "PHONE_INTERVIEW", "TECHNICAL_INTERVIEW",
+      "ONSITE_INTERVIEW", "FINAL_ROUND", "OFFER", "ACCEPTED", "REJECTED",
+    ]);
+    const applied = applications.filter(
+      (a) => a.appliedAt || APPLIED_AND_BEYOND.has(a.status)
+    );
     const totalApplied = applied.length;
 
     // An app "responded" if it ever reached a responded status
