@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
+import { getCalendarClient } from "@/lib/google";
 
 const createSchema = z.object({
   jobId: z.string().min(1),
@@ -197,23 +198,82 @@ export async function PATCH(request: NextRequest) {
     const calendarStatuses = ["PHONE_INTERVIEW", "TECHNICAL_INTERVIEW", "ONSITE_INTERVIEW", "FINAL_ROUND"];
     if (status && calendarStatuses.includes(status) && !updated.calendarEventId) {
       try {
-        const calRes = await fetch(
-          `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/api/integrations/calendar`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Cookie: request.headers.get("cookie") ?? "",
+        const calendar = await getCalendarClient(session.userId);
+        if (calendar) {
+          // Load job + analysis + story for event description
+          const appData = await prisma.application.findUnique({
+            where: { id },
+            include: {
+              job: {
+                include: {
+                  analyses: {
+                    where: { userId: session.profileId },
+                    orderBy: { createdAt: "desc" },
+                    take: 1,
+                  },
+                },
+              },
+              story: true,
             },
-            body: JSON.stringify({ applicationId: id }),
+          });
+
+          if (appData) {
+            const job = appData.job;
+            const analysis = job.analyses[0];
+
+            // Determine event time
+            let eventStart: Date;
+            if (appData.interviewAt) {
+              eventStart = new Date(appData.interviewAt);
+              eventStart.setHours(eventStart.getHours() - 24);
+            } else {
+              eventStart = new Date();
+              eventStart.setDate(eventStart.getDate() + 1);
+              eventStart.setHours(9, 0, 0, 0);
+            }
+            const eventEnd = new Date(eventStart);
+            eventEnd.setHours(eventEnd.getHours() + 1);
+
+            // Build description
+            const descParts: string[] = [`Interview Prep for ${job.title} at ${job.company}`, ""];
+            if (analysis) {
+              descParts.push(`Fit Score: ${analysis.overallFitScore}%`);
+              if (analysis.matchingSkills.length > 0) descParts.push(`Matching Skills: ${analysis.matchingSkills.join(", ")}`);
+              if (analysis.missingSkills.length > 0) descParts.push(`Skills to Review: ${analysis.missingSkills.join(", ")}`);
+              descParts.push("");
+            }
+            if (appData.story) {
+              try {
+                const tp = JSON.parse(appData.story.talkingPointsVersion);
+                descParts.push("--- TALKING POINTS ---", "");
+                if (tp.whyMe) descParts.push("WHY ME:", tp.whyMe, "");
+                if (tp.whyThisCompany) descParts.push("WHY THIS COMPANY:", tp.whyThisCompany, "");
+                if (tp.relevantBackground) descParts.push("MY BACKGROUND:", tp.relevantBackground, "");
+              } catch { /* skip */ }
+            }
+            descParts.push(`View in JobPilot: ${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/tracker`);
+
+            const event = await calendar.events.insert({
+              calendarId: "primary",
+              requestBody: {
+                summary: `${job.company} - ${job.title} Interview Prep`,
+                description: descParts.join("\n"),
+                start: { dateTime: eventStart.toISOString() },
+                end: { dateTime: eventEnd.toISOString() },
+                reminders: {
+                  useDefault: false,
+                  overrides: [{ method: "popup", minutes: 60 }, { method: "popup", minutes: 15 }],
+                },
+                colorId: "9",
+              },
+            });
+
+            const eventId = event.data.id!;
+            await prisma.application.update({ where: { id }, data: { calendarEventId: eventId } });
+            calendarEvent = { eventId, url: event.data.htmlLink ?? "" };
           }
-        );
-        const calData = await calRes.json();
-        if (calData.success && !calData.duplicate) {
-          calendarEvent = { eventId: calData.eventId, url: calData.url };
         }
       } catch (err) {
-        // Don't break the status change flow
         console.error("[applications PATCH] Calendar event creation failed:", err);
       }
     }
