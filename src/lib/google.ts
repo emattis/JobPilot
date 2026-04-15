@@ -9,17 +9,22 @@ export function getOAuth2Client() {
   );
 }
 
-export function getAuthUrl(state: string): string {
+const ALL_SCOPES = [
+  "email",
+  "profile",
+  "https://www.googleapis.com/auth/gmail.send",
+  "https://www.googleapis.com/auth/spreadsheets",
+  "https://www.googleapis.com/auth/drive.file",
+  "https://www.googleapis.com/auth/calendar.events",
+];
+
+export function getAuthUrl(state?: string): string {
   const client = getOAuth2Client();
   return client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
-    scope: [
-      "https://www.googleapis.com/auth/gmail.send",
-      "https://www.googleapis.com/auth/spreadsheets",
-      "https://www.googleapis.com/auth/drive.file",
-    ],
-    state,
+    scope: ALL_SCOPES,
+    state: state ?? "login",
   });
 }
 

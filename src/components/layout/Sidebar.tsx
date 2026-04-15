@@ -17,11 +17,9 @@ import {
   BookOpen,
   Database,
   Mail,
-  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { toast } from "sonner";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -39,7 +37,6 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [gmailConnected, setGmailConnected] = useState<boolean | null>(null);
-  const [connectingGmail, setConnectingGmail] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/google")
@@ -47,23 +44,6 @@ export function Sidebar() {
       .then((d) => { if (d.success) setGmailConnected(d.connected); })
       .catch(() => {});
   }, []);
-
-  async function handleConnectGmail() {
-    setConnectingGmail(true);
-    try {
-      const res = await fetch("/api/auth/google", { method: "POST" });
-      const data = await res.json();
-      if (data.success && data.url) {
-        window.location.href = data.url;
-      } else {
-        toast.error("Failed to start Gmail connection");
-      }
-    } catch {
-      toast.error("Failed to connect Gmail");
-    } finally {
-      setConnectingGmail(false);
-    }
-  }
 
   async function handleLogout() {
     await fetch("/api/auth", { method: "DELETE" });
@@ -118,22 +98,11 @@ export function Sidebar() {
           <ThemeToggle />
         </div>
         {gmailConnected !== null && (
-          gmailConnected ? (
-            <div className="flex items-center gap-3 px-3 py-2 text-sm font-medium text-muted-foreground">
-              <Mail className="w-4 h-4 shrink-0 text-green-400" />
-              <span className="text-xs">Gmail Connected</span>
-              <span className="w-2 h-2 rounded-full bg-green-400 ml-auto shrink-0" />
-            </div>
-          ) : (
-            <button
-              onClick={handleConnectGmail}
-              disabled={connectingGmail}
-              className="flex w-full items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
-            >
-              {connectingGmail ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" /> : <Mail className="w-4 h-4 shrink-0" />}
-              Connect Gmail
-            </button>
-          )
+          <div className="flex items-center gap-3 px-3 py-2 text-sm font-medium text-muted-foreground">
+            <Mail className="w-4 h-4 shrink-0" />
+            <span className="text-xs">{gmailConnected ? "Google Connected" : "Google Not Connected"}</span>
+            <span className={`w-2 h-2 rounded-full ml-auto shrink-0 ${gmailConnected ? "bg-green-400" : "bg-muted-foreground/30"}`} />
+          </div>
         )}
         <Link
           href="/profile"

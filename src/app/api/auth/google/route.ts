@@ -3,7 +3,7 @@ import { getSessionUser } from "@/lib/auth";
 import { getAuthUrl } from "@/lib/google";
 import { prisma } from "@/lib/db";
 
-// GET: check gmail connection status
+// GET: check Google connection status
 export async function GET() {
   const session = await getSessionUser();
   if (!session) {
@@ -21,18 +21,15 @@ export async function GET() {
   });
 }
 
-// POST: initiate OAuth flow
+// POST: get OAuth URL (for login page or re-auth)
 export async function POST() {
+  // Check if already logged in (re-auth to refresh scopes)
   const session = await getSessionUser();
-  if (!session) {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-  }
-
-  const url = getAuthUrl(session.userId);
+  const url = getAuthUrl(session?.userId);
   return NextResponse.json({ success: true, url });
 }
 
-// DELETE: disconnect Gmail
+// DELETE: disconnect Google services (keeps account, clears tokens)
 export async function DELETE() {
   const session = await getSessionUser();
   if (!session) {
