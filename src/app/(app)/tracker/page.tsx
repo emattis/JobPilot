@@ -121,7 +121,7 @@ export default function TrackerPage() {
     setApplications((prev) =>
       prev.map((a) => (a.id === id ? { ...a, status } : a))
     );
-    const result = await patchApp(id, { status });
+    const result = await patchApp(id, { status, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone });
     if (result?.calendarEvent) {
       toast.success(
         <span>
@@ -131,6 +131,8 @@ export default function TrackerPage() {
           </a>
         </span>
       );
+    } else if (result?.calendarHint) {
+      toast.info(result.calendarHint);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -142,6 +144,21 @@ export default function TrackerPage() {
   const handleFollowUpChange = useCallback(async (id: string, followUpDate: string) => {
     setApplications((prev) => prev.map((a) => (a.id === id ? { ...a, followUpDate } : a)));
     await patchApp(id, { followUpDate });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleInterviewDateChange = useCallback(async (id: string, interviewAt: string) => {
+    setApplications((prev) => prev.map((a) => (a.id === id ? { ...a, interviewAt: interviewAt || null } : a)));
+    const result = await patchApp(id, { interviewAt, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+    if (result?.calendarEvent) {
+      toast.success(
+        <span>
+          Calendar event updated.{" "}
+          <a href={result.calendarEvent.url} target="_blank" rel="noopener noreferrer" className="underline font-medium">
+            View in Calendar
+          </a>
+        </span>
+      );
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRemove = useCallback(async (id: string) => {
@@ -384,6 +401,7 @@ export default function TrackerPage() {
             onStatusChange={handleStatusChange}
             onNotesChange={handleNotesChange}
             onFollowUpChange={handleFollowUpChange}
+            onInterviewDateChange={handleInterviewDateChange}
             onRemove={handleRemove}
             onRefresh={fetchApps}
           />

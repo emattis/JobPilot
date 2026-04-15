@@ -27,6 +27,7 @@ interface DetailPanelProps {
   onStatusChange: (id: string, status: AppStatus) => Promise<void>;
   onNotesChange: (id: string, notes: string) => Promise<void>;
   onFollowUpChange: (id: string, date: string) => Promise<void>;
+  onInterviewDateChange: (id: string, date: string) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
   onRefresh: () => void;
 }
@@ -37,12 +38,16 @@ export function DetailPanel({
   onStatusChange,
   onNotesChange,
   onFollowUpChange,
+  onInterviewDateChange,
   onRemove,
   onRefresh,
 }: DetailPanelProps) {
   const [notes, setNotes] = useState(app.notes ?? "");
   const [followUp, setFollowUp] = useState(
     app.followUpDate ? format(parseISO(app.followUpDate), "yyyy-MM-dd") : ""
+  );
+  const [interviewDate, setInterviewDate] = useState(
+    app.interviewAt ? format(parseISO(app.interviewAt), "yyyy-MM-dd'T'HH:mm") : ""
   );
   const [savingNotes, setSavingNotes] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
@@ -56,9 +61,10 @@ export function DetailPanel({
   useEffect(() => {
     setNotes(app.notes ?? "");
     setFollowUp(app.followUpDate ? format(parseISO(app.followUpDate), "yyyy-MM-dd") : "");
+    setInterviewDate(app.interviewAt ? format(parseISO(app.interviewAt), "yyyy-MM-dd'T'HH:mm") : "");
     const manual = !app.job.url || app.job.url.startsWith("manual://");
     setJobUrl(manual ? "" : app.job.url);
-  }, [app.id, app.notes, app.followUpDate, app.job.url]);
+  }, [app.id, app.notes, app.followUpDate, app.interviewAt, app.job.url]);
 
   const col = COLUMN_BY_STATUS[app.status];
   const analysis = app.job.analyses[0];
@@ -73,6 +79,12 @@ export function DetailPanel({
   async function handleFollowUpBlur() {
     if (followUp === (app.followUpDate ? format(parseISO(app.followUpDate), "yyyy-MM-dd") : "")) return;
     await onFollowUpChange(app.id, followUp);
+  }
+
+  async function handleInterviewDateBlur() {
+    const current = app.interviewAt ? format(parseISO(app.interviewAt), "yyyy-MM-dd'T'HH:mm") : "";
+    if (interviewDate === current) return;
+    await onInterviewDateChange(app.id, interviewDate);
   }
 
   async function handleSaveUrl() {
@@ -320,6 +332,20 @@ export function DetailPanel({
               </select>
               <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none text-muted-foreground" />
             </div>
+          </div>
+
+          {/* Interview date */}
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-2">
+              Interview Date & Time
+            </label>
+            <input
+              type="datetime-local"
+              value={interviewDate}
+              onChange={(e) => setInterviewDate(e.target.value)}
+              onBlur={handleInterviewDateBlur}
+              className="w-full text-sm px-3 py-2 rounded-md border border-border bg-card focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
           </div>
 
           {/* Follow-up date */}

@@ -123,11 +123,13 @@ export async function DELETE(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, status, notes, followUpDate } = body as {
+    const { id, status, notes, followUpDate, interviewAt, timezone } = body as {
       id: string;
       status?: string;
       notes?: string;
       followUpDate?: string;
+      interviewAt?: string;
+      timezone?: string;
     };
 
     if (!id) return NextResponse.json({ success: false, error: "Missing id" }, { status: 400 });
@@ -179,6 +181,7 @@ export async function PATCH(request: NextRequest) {
         ...(status && { status: status as never }),
         ...(notes !== undefined && { notes }),
         ...(followUpDate && { followUpDate: new Date(followUpDate) }),
+        ...(interviewAt !== undefined && { interviewAt: interviewAt ? new Date(interviewAt) : null }),
         ...timestampUpdates,
       },
     });
@@ -193,14 +196,33 @@ export async function PATCH(request: NextRequest) {
       });
     }
 
-    // Auto-create calendar event for interview stages
+    // Calendar event logic
     let calendarEvent: { eventId: string; url: string } | null = null;
+    let calendarHint: string | null = null;
+    const tz = timezone ?? "America/New_York";
+
     const calendarStatuses = ["PHONE_INTERVIEW", "TECHNICAL_INTERVIEW", "ONSITE_INTERVIEW", "FINAL_ROUND"];
-    if (status && calendarStatuses.includes(status) && !updated.calendarEventId) {
+    const isInterviewStatus = status && calendarStatuses.includes(status);
+    const interviewDateChanged = interviewAt !== undefined && interviewAt !== "";
+
+    // Determine if we need to create or update a calendar event
+    const effectiveInterviewAt = interviewDateChanged
+      ? new Date(interviewAt!)
+      : updated.interviewAt;
+
+    // Case 1: Status changed to interview stage but no interview date — hint to set one
+    if (isInterviewStatus && !updated.calendarEventId && !effectiveInterviewAt) {
+      calendarHint = "Set an interview date to auto-create a prep event";
+    }
+
+    // Case 2: We have an interview date and need to create or update the event
+    const needsNewEvent = effectiveInterviewAt && !updated.calendarEventId;
+    const needsEventUpdate = interviewDateChanged && updated.calendarEventId;
+
+    if ((needsNewEvent || needsEventUpdate) && effectiveInterviewAt) {
       try {
         const calendar = await getCalendarClient(session.userId);
         if (calendar) {
-          // Load job + analysis + story for event description
           const appData = await prisma.application.findUnique({
             where: { id },
             include: {
@@ -221,18 +243,9 @@ export async function PATCH(request: NextRequest) {
             const job = appData.job;
             const analysis = job.analyses[0];
 
-            // Determine event time
-            let eventStart: Date;
-            if (appData.interviewAt) {
-              eventStart = new Date(appData.interviewAt);
-              eventStart.setHours(eventStart.getHours() - 24);
-            } else {
-              eventStart = new Date();
-              eventStart.setDate(eventStart.getDate() + 1);
-              eventStart.setHours(9, 0, 0, 0);
-            }
-            const eventEnd = new Date(eventStart);
-            eventEnd.setHours(eventEnd.getHours() + 1);
+            // Prep event: 24 hours before the interview
+            const eventStart = new Date(effectiveInterviewAt.getTime() - 24 * 60 * 60 * 1000);
+            const eventEnd = new Date(eventStart.getTime() + 60 * 60 * 1000);
 
             // Build description
             const descParts: string[] = [`Interview Prep for ${job.title} at ${job.company}`, ""];
@@ -253,32 +266,42 @@ export async function PATCH(request: NextRequest) {
             }
             descParts.push(`View in JobPilot: ${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/tracker`);
 
-            const event = await calendar.events.insert({
-              calendarId: "primary",
-              requestBody: {
-                summary: `${job.company} - ${job.title} Interview Prep`,
-                description: descParts.join("\n"),
-                start: { dateTime: eventStart.toISOString() },
-                end: { dateTime: eventEnd.toISOString() },
-                reminders: {
-                  useDefault: false,
-                  overrides: [{ method: "popup", minutes: 60 }, { method: "popup", minutes: 15 }],
-                },
-                colorId: "9",
+            const eventBody = {
+              summary: `${job.company} - ${job.title} Interview Prep`,
+              description: descParts.join("\n"),
+              start: { dateTime: eventStart.toISOString(), timeZone: tz },
+              end: { dateTime: eventEnd.toISOString(), timeZone: tz },
+              reminders: {
+                useDefault: false,
+                overrides: [{ method: "popup" as const, minutes: 60 }, { method: "popup" as const, minutes: 15 }],
               },
-            });
+              colorId: "9",
+            };
 
-            const eventId = event.data.id!;
-            await prisma.application.update({ where: { id }, data: { calendarEventId: eventId } });
-            calendarEvent = { eventId, url: event.data.htmlLink ?? "" };
+            if (needsEventUpdate && updated.calendarEventId) {
+              const event = await calendar.events.update({
+                calendarId: "primary",
+                eventId: updated.calendarEventId,
+                requestBody: eventBody,
+              });
+              calendarEvent = { eventId: updated.calendarEventId, url: event.data.htmlLink ?? "" };
+            } else if (needsNewEvent) {
+              const event = await calendar.events.insert({
+                calendarId: "primary",
+                requestBody: eventBody,
+              });
+              const eventId = event.data.id!;
+              await prisma.application.update({ where: { id }, data: { calendarEventId: eventId } });
+              calendarEvent = { eventId, url: event.data.htmlLink ?? "" };
+            }
           }
         }
       } catch (err) {
-        console.error("[applications PATCH] Calendar event creation failed:", err);
+        console.error("[applications PATCH] Calendar event error:", err);
       }
     }
 
-    return NextResponse.json({ success: true, data: updated, calendarEvent });
+    return NextResponse.json({ success: true, data: updated, calendarEvent, calendarHint });
   } catch {
     return NextResponse.json({ success: false, error: "Failed to update" }, { status: 500 });
   }
