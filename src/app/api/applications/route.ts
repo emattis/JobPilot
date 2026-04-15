@@ -210,16 +210,11 @@ export async function PATCH(request: NextRequest) {
       ? new Date(interviewAt!)
       : updated.interviewAt;
 
-    // Case 1: Status changed to interview stage but no interview date — hint to set one
-    if (isInterviewStatus && !updated.calendarEventId && !effectiveInterviewAt) {
-      calendarHint = "Set an interview date to auto-create a prep event";
-    }
-
-    // Case 2: We have an interview date and need to create or update the event
-    const needsNewEvent = effectiveInterviewAt && !updated.calendarEventId;
+    // Create event on interview status change (with or without interview date)
+    const needsNewEvent = (isInterviewStatus || (effectiveInterviewAt && !updated.calendarEventId)) && !updated.calendarEventId;
     const needsEventUpdate = interviewDateChanged && updated.calendarEventId;
 
-    if ((needsNewEvent || needsEventUpdate) && effectiveInterviewAt) {
+    if (needsNewEvent || needsEventUpdate) {
       try {
         const calendar = await getCalendarClient(session.userId);
         if (calendar) {
@@ -243,8 +238,15 @@ export async function PATCH(request: NextRequest) {
             const job = appData.job;
             const analysis = job.analyses[0];
 
-            // Prep event: 24 hours before the interview
-            const eventStart = new Date(effectiveInterviewAt.getTime() - 24 * 60 * 60 * 1000);
+            // Prep event: 24h before interview if set, otherwise tomorrow 9am
+            let eventStart: Date;
+            if (effectiveInterviewAt) {
+              eventStart = new Date(effectiveInterviewAt.getTime() - 24 * 60 * 60 * 1000);
+            } else {
+              eventStart = new Date();
+              eventStart.setDate(eventStart.getDate() + 1);
+              eventStart.setHours(9, 0, 0, 0);
+            }
             const eventEnd = new Date(eventStart.getTime() + 60 * 60 * 1000);
 
             // Build description
