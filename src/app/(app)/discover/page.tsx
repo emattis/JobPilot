@@ -270,7 +270,7 @@ export default function DiscoverPage() {
           <Compass className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
           <p className="text-sm font-medium">No jobs discovered yet</p>
           <p className="text-xs text-muted-foreground mt-1 mb-4">
-            Run a scan to find jobs matched to your profile and target companies
+            Run a scan to find jobs from your profile&apos;s target companies and Sources page
           </p>
           <button
             onClick={runScan}

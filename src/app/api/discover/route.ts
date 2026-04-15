@@ -156,29 +156,74 @@ export async function POST() {
 
         const newJobsToScore: DiscoveredJobInput[] = [];
 
-        // ── Company boards (Greenhouse + Lever) ────────────────────────────
-        const companies = profile.targetCompanies.slice(0, 20);
-        if (companies.length === 0) {
-          send({ type: "status", message: "No target companies set — add companies to your profile to discover jobs" });
+        // ── Load sources from CompanyWatchlist ─────────────────────────────
+        const watchlistSources = await prisma.companyWatchlist.findMany({
+          where: { userId: profileId, active: true },
+          select: { id: true, name: true, slug: true, atsType: true },
+        });
+
+        // Build a combined list: profile target companies (scan both GH + Lever)
+        // plus watchlist sources (scan by their specific ATS type)
+        interface ScanTarget {
+          name: string;
+          slug: string;
+          atsType: "greenhouse" | "lever" | "both";
+          watchlistId?: string;
+        }
+
+        const scanTargets: ScanTarget[] = [];
+        const seenSlugs = new Set<string>();
+
+        // Add watchlist sources first (they have explicit ATS types)
+        for (const src of watchlistSources) {
+          const ats = src.atsType === "greenhouse" || src.atsType === "lever" ? src.atsType : "both";
+          scanTargets.push({ name: src.name, slug: src.slug, atsType: ats, watchlistId: src.id });
+          seenSlugs.add(src.slug.toLowerCase());
+        }
+
+        // Add profile target companies that aren't already in the watchlist
+        for (const company of profile.targetCompanies) {
+          const slug = company.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+          if (!seenSlugs.has(slug)) {
+            scanTargets.push({ name: company, slug, atsType: "both" });
+            seenSlugs.add(slug);
+          }
+        }
+
+        if (scanTargets.length === 0) {
+          send({ type: "status", message: "No companies to scan — add companies to your profile or the Sources page" });
         } else {
           send({
             type: "status",
-            message: `Scanning ${companies.length} company board${companies.length !== 1 ? "s" : ""}…`,
+            message: `Scanning ${scanTargets.length} company board${scanTargets.length !== 1 ? "s" : ""}…`,
           });
 
-          for (const company of companies) {
-            const ghJobs = await discoverGreenhouseJobs(company, profile.targetRoles);
-            const lvJobs = await discoverLeverJobs(company, profile.targetRoles);
+          for (const target of scanTargets) {
+            send({ type: "status", message: `Scanning ${target.name}…` });
 
-            for (const job of [...ghJobs, ...lvJobs]) {
+            const jobs: DiscoveredJobInput[] = [];
+            if (target.atsType === "greenhouse" || target.atsType === "both") {
+              jobs.push(...(await discoverGreenhouseJobs(target.slug, profile.targetRoles)));
+            }
+            if (target.atsType === "lever" || target.atsType === "both") {
+              jobs.push(...(await discoverLeverJobs(target.slug, profile.targetRoles)));
+            }
+
+            for (const job of jobs) {
               if (!existingByUrl.has(job.url)) {
-                // Brand new job
                 existingByUrl.set(job.url, { id: "", url: job.url, relevanceScore: null });
                 newJobsToScore.push(job);
               } else if (staleUrls.has(job.url)) {
-                // Already in DB but needs re-scoring
                 newJobsToScore.push(job);
               }
+            }
+
+            // Update watchlist last scanned
+            if (target.watchlistId) {
+              await prisma.companyWatchlist.update({
+                where: { id: target.watchlistId },
+                data: { lastScanned: new Date(), jobsFound: jobs.length },
+              }).catch(() => {});
             }
 
             await new Promise((r) => setTimeout(r, 300));
