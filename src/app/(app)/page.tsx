@@ -34,17 +34,25 @@ async function getStats() {
     }),
   ]);
 
+  // "Applied" = any app at or past APPLIED status
   const applied = await prisma.application.count({
     where: {
       userId: session.profileId,
       OR: [
         { appliedAt: { not: null } },
-        { status: { in: ["APPLIED", "SCREENING", "PHONE_INTERVIEW", "TECHNICAL_INTERVIEW", "ONSITE_INTERVIEW", "FINAL_ROUND", "OFFER", "ACCEPTED", "REJECTED"] } },
+        { status: { in: ["APPLIED", "SCREENING", "PHONE_INTERVIEW", "TECHNICAL_INTERVIEW", "ONSITE_INTERVIEW", "FINAL_ROUND", "OFFER", "ACCEPTED", "REJECTED"] as const } },
       ],
     },
   });
+  // "Responded" = progressed beyond APPLIED (any movement past APPLIED)
   const responded = await prisma.application.count({
-    where: { userId: session.profileId, responseAt: { not: null } },
+    where: {
+      userId: session.profileId,
+      OR: [
+        { status: { in: ["SCREENING", "PHONE_INTERVIEW", "TECHNICAL_INTERVIEW", "ONSITE_INTERVIEW", "FINAL_ROUND", "OFFER", "ACCEPTED", "REJECTED"] as const } },
+        { responseAt: { not: null } },
+      ],
+    },
   });
 
   // Count apps per day for the last 7 days
