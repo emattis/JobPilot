@@ -14,7 +14,9 @@ import {
   FileText,
   List,
   Building2,
+  Clock,
 } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 import {
   Command,
   CommandInput,
@@ -28,6 +30,8 @@ interface AppOption {
   id: string;
   jobTitle: string;
   company: string;
+  hasStory: boolean;
+  storyUpdatedAt: string | null;
 }
 
 interface StorySections {
@@ -119,10 +123,12 @@ export default function StoryPage() {
         const data = await res.json();
         if (data.success) {
           const apps: AppOption[] = data.data.map(
-            (a: { id: string; job: { title: string; company: string } }) => ({
+            (a: { id: string; job: { title: string; company: string }; story: { id: string } | null; updatedAt: string }) => ({
               id: a.id,
               jobTitle: a.job.title,
               company: a.job.company,
+              hasStory: !!a.story,
+              storyUpdatedAt: a.story ? a.updatedAt : null,
             })
           );
           setApplications(apps);
@@ -546,18 +552,71 @@ export default function StoryPage() {
         </div>
       )}
 
-      {/* Empty state */}
-      {!story && phase.type === "idle" && (
-        <div className="rounded-xl border border-dashed border-border p-12 text-center">
-          <BookOpen className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-          <p className="text-sm font-medium">No story generated yet</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            {applications.length > 0
-              ? "Select a tracked application and generate your personalized narrative"
-              : "Track some applications first, then come back to generate your story"}
-          </p>
-        </div>
-      )}
+      {/* Default view: show saved stories list when no app selected or no story loaded */}
+      {!story && phase.type === "idle" && (() => {
+        const savedStories = applications.filter((a) => a.hasStory);
+        const showEmptyForSelected = selectedAppId && !applications.find((a) => a.id === selectedAppId)?.hasStory;
+
+        if (showEmptyForSelected) {
+          return (
+            <div className="rounded-xl border border-dashed border-border p-12 text-center">
+              <BookOpen className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+              <p className="text-sm font-medium">No story generated yet</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Click &quot;Generate My Story&quot; to create a personalized narrative for this role
+              </p>
+            </div>
+          );
+        }
+
+        if (savedStories.length > 0) {
+          return (
+            <div>
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                Previously Generated Stories
+              </h2>
+              <div className="grid gap-2">
+                {savedStories.map((app) => (
+                  <button
+                    key={app.id}
+                    onClick={() => setSelectedAppId(app.id)}
+                    className="flex items-start gap-3 rounded-xl border border-border bg-card p-4 hover:border-border/80 hover:bg-white/[0.02] transition-colors text-left w-full"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                      <BookOpen className="w-4 h-4 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{app.jobTitle}</p>
+                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                        <Building2 className="w-3 h-3" />
+                        {app.company}
+                      </p>
+                      {app.storyUpdatedAt && (
+                        <p className="text-[11px] text-muted-foreground/60 flex items-center gap-1 mt-1">
+                          <Clock className="w-3 h-3" />
+                          Generated {formatDistanceToNow(new Date(app.storyUpdatedAt), { addSuffix: true })}
+                        </p>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div className="rounded-xl border border-dashed border-border p-12 text-center">
+            <BookOpen className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+            <p className="text-sm font-medium">No stories generated yet</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {applications.length > 0
+                ? "Select a tracked application and generate your personalized narrative"
+                : "Track some applications first, then come back to generate your story"}
+            </p>
+          </div>
+        );
+      })()}
     </div>
   );
 }
