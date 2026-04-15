@@ -84,7 +84,6 @@ interface MetricsData {
   appsPerWeek: WeekData[];
   sourceEffectiveness: SourceData[];
   skillGaps: SkillGap[];
-  skillBuckets: SkillBucket[];
   dailyActivity: DailyActivity[];
 }
 
@@ -135,6 +134,8 @@ const FUNNEL_COLORS = ["#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#22c55e"];
 export default function MetricsPage() {
   const [metrics, setMetrics] = useState<MetricsData | null>(null);
   const [summary, setSummary] = useState<SummaryData | null>(null);
+  const [skillBuckets, setSkillBuckets] = useState<SkillBucket[]>([]);
+  const [bucketsLoading, setBucketsLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [summaryLoading, setSummaryLoading] = useState(true);
 
@@ -152,6 +153,13 @@ export default function MetricsPage() {
         if (d.success) setSummary(d.data);
       })
       .finally(() => setSummaryLoading(false));
+
+    fetch("/api/metrics/skill-buckets")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success) setSkillBuckets(d.data);
+      })
+      .finally(() => setBucketsLoading(false));
   }, []);
 
   if (loading) {
@@ -188,7 +196,7 @@ export default function MetricsPage() {
     );
   }
 
-  const { stats, funnel, appsPerWeek, sourceEffectiveness, skillBuckets, dailyActivity } = metrics;
+  const { stats, funnel, appsPerWeek, sourceEffectiveness, dailyActivity } = metrics;
   const todayCount = dailyActivity[dailyActivity.length - 1]?.count ?? 0;
   const yesterdayCount = dailyActivity[dailyActivity.length - 2]?.count ?? 0;
 
@@ -429,7 +437,12 @@ export default function MetricsPage() {
             <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
             Top Skill Gaps
           </h2>
-          {skillBuckets.length === 0 ? (
+          {bucketsLoading ? (
+            <div className="flex items-center gap-2 py-8 justify-center text-sm text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Analyzing skill gaps...
+            </div>
+          ) : skillBuckets.length === 0 ? (
             <EmptyChart message="Analyze more jobs to see skill gaps" />
           ) : (
             <div className="space-y-3">

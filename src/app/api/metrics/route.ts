@@ -1,76 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
-import { getGeminiClient, MODEL } from "@/lib/ai/client";
-import { parseAiObject } from "@/lib/ai/parse-json";
-import { createHash } from "crypto";
-
-// ── Skill bucket cache ──────────────────────────────────────────────────────
-
-interface SkillBucket {
-  name: string;
-  jobCount: number;
-  skills: string[];
-}
-
-const bucketCache = new Map<string, { buckets: SkillBucket[]; ts: number }>();
-const CACHE_TTL = 1000 * 60 * 60; // 1 hour
-
-async function bucketizeSkills(
-  skillGaps: { skill: string; count: number }[]
-): Promise<SkillBucket[]> {
-  if (skillGaps.length === 0) return [];
-
-  // Cache key from sorted skill list
-  const key = createHash("md5")
-    .update(skillGaps.map((s) => `${s.skill}:${s.count}`).join("|"))
-    .digest("hex");
-
-  const cached = bucketCache.get(key);
-  if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.buckets;
-
-  try {
-    const client = getGeminiClient();
-    const model = client.getGenerativeModel({
-      model: MODEL,
-      generationConfig: { temperature: 0, maxOutputTokens: 2048 },
-    });
-
-    const skillList = skillGaps
-      .map((s) => `- ${s.skill} (${s.count} jobs)`)
-      .join("\n");
-
-    const prompt = `Group these job skills into exactly 4 high-level categories. Each skill should appear in exactly one category. The jobCount for each category should be the sum of the job counts of the skills in that category.
-
-Skills:
-${skillList}
-
-Return a JSON object with this exact structure:
-{ "buckets": [{ "name": "Category Name", "jobCount": number, "skills": ["skill1", "skill2"] }] }
-
-Rules:
-- Exactly 4 buckets
-- Category names should be short (2-4 words)
-- Sort buckets by jobCount descending
-- Include every skill in exactly one bucket
-- Return only valid JSON, no markdown`;
-
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    const parsed = parseAiObject<{ buckets: SkillBucket[] }>(text);
-
-    bucketCache.set(key, { buckets: parsed.buckets, ts: Date.now() });
-    return parsed.buckets;
-  } catch (err) {
-    console.error("[metrics] Skill bucketing failed:", err);
-    // Fallback: return top 4 skills as individual buckets
-    return skillGaps.slice(0, 4).map((s) => ({
-      name: s.skill,
-      jobCount: s.count,
-      skills: [s.skill],
-    }));
-  }
-}
 
 // Statuses that count as "responded" (any movement past APPLIED)
 const RESPONDED_STATUSES = [
@@ -210,9 +140,6 @@ export async function GET() {
       .sort((a, b) => b.count - a.count)
       .slice(0, 30);
 
-    // AI-bucketed version
-    const skillBuckets = await bucketizeSkills(skillGaps);
-
     // ── Daily activity (last 7 days) ──────────────────────────────────────
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -247,7 +174,6 @@ export async function GET() {
         appsPerWeek,
         sourceEffectiveness,
         skillGaps,
-        skillBuckets,
         dailyActivity,
       },
     });
