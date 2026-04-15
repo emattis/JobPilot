@@ -29,6 +29,7 @@ export interface Referral {
   contactName: string;
   contactRole: string | null;
   contactCompany: string | null;
+  contactEmail: string | null;
   contactLinkedin: string | null;
   outreachType: OutreachType;
   relationship: string;

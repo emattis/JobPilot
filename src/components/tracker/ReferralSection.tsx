@@ -14,6 +14,8 @@ import {
   RefreshCw,
   ExternalLink,
   AlertCircle,
+  Mail,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
@@ -57,10 +59,10 @@ function AddContactForm({
   onAdd,
   onCancel,
 }: {
-  onAdd: (data: { contactName: string; contactRole: string; contactCompany: string; outreachType: OutreachType; relationship: string }) => void;
+  onAdd: (data: { contactName: string; contactRole: string; contactCompany: string; contactEmail: string; outreachType: OutreachType; relationship: string }) => void;
   onCancel: () => void;
 }) {
-  const [form, setForm] = useState({ contactName: "", contactRole: "", contactCompany: "", outreachType: "WARM_INTRO" as OutreachType, relationship: "" });
+  const [form, setForm] = useState({ contactName: "", contactRole: "", contactCompany: "", contactEmail: "", outreachType: "WARM_INTRO" as OutreachType, relationship: "" });
 
   function set(k: keyof typeof form, v: string) {
     setForm((p) => ({ ...p, [k]: v }));
@@ -111,6 +113,16 @@ function AddContactForm({
             className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           />
         </div>
+        <div>
+          <label className="text-[10px] text-muted-foreground mb-0.5 block">Their email</label>
+          <input
+            value={form.contactEmail}
+            onChange={(e) => set("contactEmail", e.target.value)}
+            placeholder="jane@company.com"
+            type="email"
+            className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          />
+        </div>
       </div>
       <div>
         <label className="text-[10px] text-muted-foreground mb-0.5 block">Connection context *</label>
@@ -147,16 +159,21 @@ function ReferralCard({
   referral,
   onUpdate,
   onDelete,
+  gmailConnected,
+  onConnectGmail,
 }: {
   referral: Referral;
   onUpdate: (id: string, data: Partial<Referral>) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  gmailConnected: boolean;
+  onConnectGmail: () => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const [copied, setCopied] = useState(false);
   const [editingMessage, setEditingMessage] = useState(false);
   const [message, setMessage] = useState(referral.messageTemplate ?? "");
   const [regenerating, setRegenerating] = useState(false);
+  const [sending, setSending] = useState(false);
 
   const sc = STATUS_CONFIG[referral.status];
   const followUp = needsFollowUp(referral);
@@ -215,6 +232,49 @@ function ReferralCard({
       toast.error("Failed to regenerate message");
     } finally {
       setRegenerating(false);
+    }
+  }
+
+  async function sendViaGmail() {
+    if (!gmailConnected) {
+      onConnectGmail();
+      return;
+    }
+    if (!referral.contactEmail) {
+      toast.error("Add an email address for this contact first");
+      return;
+    }
+    if (!message) {
+      toast.error("No message to send");
+      return;
+    }
+    setSending(true);
+    try {
+      const jobInfo = referral.application
+        ? `${referral.application.job.title} at ${referral.application.job.company}`
+        : "a role";
+      const res = await fetch("/api/referrals/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          referralId: referral.id,
+          subject: `Quick question about ${jobInfo}`,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        if (data.code === "GMAIL_NOT_CONNECTED") {
+          onConnectGmail();
+          return;
+        }
+        throw new Error(data.error);
+      }
+      await onUpdate(referral.id, { status: "SENT", messageSentAt: new Date().toISOString() });
+      toast.success(`Email sent to ${referral.contactName}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to send");
+    } finally {
+      setSending(false);
     }
   }
 
@@ -294,6 +354,15 @@ function ReferralCard({
                 >
                   {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                   {copied ? "Copied" : "Copy"}
+                </button>
+                <button
+                  onClick={sendViaGmail}
+                  disabled={sending || !message || referral.status === "SENT"}
+                  className="flex items-center gap-1 h-6 px-2 rounded text-[10px] font-medium text-sky-400 hover:bg-sky-500/10 transition-colors disabled:opacity-40"
+                  title={!referral.contactEmail ? "Add email first" : !gmailConnected ? "Connect Gmail first" : "Send via Gmail"}
+                >
+                  {sending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                  {sending ? "Sending" : "Send"}
                 </button>
               </div>
             </div>
@@ -375,12 +444,53 @@ function ReferralCard({
             )}
           </div>
 
-          {/* LinkedIn input */}
+          {/* Email + LinkedIn inputs */}
+          {!referral.contactEmail && (
+            <EmailInput referralId={referral.id} onUpdate={onUpdate} />
+          )}
           {!referral.contactLinkedin && (
             <LinkedInInput referralId={referral.id} onUpdate={onUpdate} />
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function EmailInput({
+  referralId,
+  onUpdate,
+}: {
+  referralId: string;
+  onUpdate: (id: string, data: Partial<Referral>) => Promise<void>;
+}) {
+  const [email, setEmail] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (!email.trim()) return;
+    setSaving(true);
+    await onUpdate(referralId, { contactEmail: email.trim() });
+    setSaving(false);
+  }
+
+  return (
+    <div className="flex gap-1.5">
+      <Mail className="w-3.5 h-3.5 text-muted-foreground/40 mt-1.5 shrink-0" />
+      <input
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="Email address (for sending via Gmail)"
+        type="email"
+        className="flex-1 h-7 rounded-md border border-input bg-background px-2.5 text-xs placeholder:text-muted-foreground/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      />
+      <button
+        onClick={save}
+        disabled={!email.trim() || saving}
+        className="h-7 px-2.5 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+      >
+        {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save"}
+      </button>
     </div>
   );
 }
@@ -434,18 +544,36 @@ export function ReferralSection({ applicationId, jobTitle, jobCompany }: Referra
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [gmailConnected, setGmailConnected] = useState(false);
 
   useEffect(() => {
     fetch(`/api/referrals?applicationId=${applicationId}`)
       .then((r) => r.json())
       .then((d) => { if (d.success) setReferrals(d.data); })
       .finally(() => setLoading(false));
+
+    // Check Gmail connection status
+    fetch("/api/auth/google")
+      .then((r) => r.json())
+      .then((d) => { if (d.success) setGmailConnected(d.connected); })
+      .catch(() => {});
   }, [applicationId]);
+
+  function handleConnectGmail() {
+    fetch("/api/auth/google", { method: "POST" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success && d.url) window.location.href = d.url;
+        else toast.error("Failed to start Gmail connection");
+      })
+      .catch(() => toast.error("Failed to connect Gmail"));
+  }
 
   async function handleAdd(form: {
     contactName: string;
     contactRole: string;
     contactCompany: string;
+    contactEmail: string;
     outreachType: OutreachType;
     relationship: string;
   }) {
@@ -538,6 +666,8 @@ export function ReferralSection({ applicationId, jobTitle, jobCompany }: Referra
               referral={r}
               onUpdate={handleUpdate}
               onDelete={handleDelete}
+              gmailConnected={gmailConnected}
+              onConnectGmail={handleConnectGmail}
             />
           ))}
         </div>

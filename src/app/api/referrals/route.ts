@@ -9,6 +9,7 @@ const createSchema = z.object({
   contactName: z.string().min(1),
   contactRole: z.string().optional(),
   contactCompany: z.string().optional(),
+  contactEmail: z.string().email().optional(),
   contactLinkedin: z.string().optional(),
   outreachType: z.enum(["WARM_INTRO", "COLD_OUTREACH", "ALUMNI", "HIRING_MANAGER", "RECRUITER", "EMPLOYEE"]).default("WARM_INTRO"),
   relationship: z.string().min(1),
@@ -23,6 +24,7 @@ const patchSchema = z.object({
   referralMade: z.boolean().optional(),
   referralDate: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
+  contactEmail: z.string().nullable().optional(),
   contactLinkedin: z.string().nullable().optional(),
 });
 
@@ -127,6 +129,7 @@ export async function POST(request: NextRequest) {
         contactName: input.contactName,
         contactRole: input.contactRole ?? null,
         contactCompany: input.contactCompany ?? null,
+        contactEmail: input.contactEmail ?? null,
         contactLinkedin: input.contactLinkedin ?? null,
         outreachType: input.outreachType,
         relationship: input.relationship,
@@ -167,6 +170,7 @@ export async function PATCH(request: NextRequest) {
     if (fields.referralMade !== undefined) data.referralMade = fields.referralMade;
     if ("referralDate" in fields) data.referralDate = fields.referralDate ? new Date(fields.referralDate) : null;
     if ("notes" in fields) data.notes = fields.notes ?? null;
+    if ("contactEmail" in fields) data.contactEmail = fields.contactEmail ?? null;
     if ("contactLinkedin" in fields) data.contactLinkedin = fields.contactLinkedin ?? null;
 
     const updated = await prisma.referral.update({
