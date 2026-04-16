@@ -1,5 +1,7 @@
 import * as cheerio from "cheerio";
 import type { ScrapedJob } from "@/types/analysis";
+import { getGeminiClient } from "@/lib/ai/client";
+import { parseAiObject } from "@/lib/ai/parse-json";
 
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
@@ -231,6 +233,61 @@ async function scrapeAshby(url: string): Promise<ScrapedJob> {
   };
 }
 
+// ── AI extraction fallback ───────────────────────────────────────────────────
+
+interface AiExtractedJob {
+  title: string | null;
+  company: string | null;
+  location: string | null;
+  remote: boolean | null;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  description: string | null;
+  requirements: string | null;
+  niceToHaves: string | null;
+  skills: string[] | null;
+  experienceLevel: string | null;
+}
+
+async function extractWithAi(pageText: string, url: string, source: string): Promise<ScrapedJob> {
+  // Trim to keep token count low
+  const trimmed = pageText.slice(0, 10000);
+
+  const client = getGeminiClient();
+  const model = client.getGenerativeModel({
+    model: "gemini-2.0-flash",
+    generationConfig: { temperature: 0, maxOutputTokens: 4096 },
+  });
+
+  const prompt = `Extract the following fields from this job posting page. Return JSON with: { "title": string, "company": string, "location": string, "remote": boolean, "salaryMin": number, "salaryMax": number, "description": string, "requirements": string, "niceToHaves": string, "skills": string[], "experienceLevel": string }. If a field is not found, set it to null. Return only valid JSON, no markdown.
+
+URL: ${url}
+
+Page content:
+${trimmed}`;
+
+  const result = await model.generateContent(prompt);
+  const text = result.response.text();
+  const parsed = parseAiObject<AiExtractedJob>(text);
+
+  return {
+    title: parsed.title ?? "",
+    company: parsed.company ?? new URL(url).hostname.replace("www.", "").split(".")[0],
+    location: parsed.location,
+    description: parsed.description ?? trimmed.slice(0, 4000),
+    requirements: parsed.requirements,
+    niceToHaves: parsed.niceToHaves,
+    skills: parsed.skills ?? [],
+    experienceLevel: parsed.experienceLevel,
+    salaryMin: parsed.salaryMin,
+    salaryMax: parsed.salaryMax,
+    remote: parsed.remote,
+    postedAt: null,
+    source,
+    aiExtracted: true,
+  };
+}
+
 // ── Generic / Fallback ────────────────────────────────────────────────────────
 async function scrapeGeneric(url: string, source = "manual"): Promise<ScrapedJob> {
   const res = await fetch(url, {
@@ -278,6 +335,7 @@ async function scrapeGeneric(url: string, source = "manual"): Promise<ScrapedJob
 
   // Heuristic HTML extraction
   $("script, style, nav, footer, header").remove();
+  const pageText = $.text().replace(/\s+/g, " ").trim();
 
   const title =
     $('h1[class*="title"], h1[class*="job"], [class*="job-title"]').first().text().trim() ||
@@ -288,14 +346,23 @@ async function scrapeGeneric(url: string, source = "manual"): Promise<ScrapedJob
     $("title").text().split(/[-|at]/i)[1]?.trim() ||
     new URL(url).hostname.replace("www.", "").split(".")[0];
 
-  const location =
-    $('[class*="location"], [itemprop="addressLocality"]').first().text().trim() ||
-    null;
-
-  // Extract main content — try common containers
+  // If heuristic extraction got a weak result (no title or very short description),
+  // fall back to AI extraction
   const contentEl =
     $('[class*="description"], [class*="content"], [id*="description"], main, article').first();
   const description = htmlToText(contentEl.html() ?? $("body").html() ?? "");
+
+  if (!title || description.length < 100) {
+    try {
+      return await extractWithAi(pageText, url, source);
+    } catch (err) {
+      console.error("[scraper] AI extraction failed, using heuristic:", err);
+    }
+  }
+
+  const location =
+    $('[class*="location"], [itemprop="addressLocality"]').first().text().trim() ||
+    null;
 
   const salary = extractSalary(description);
 
@@ -303,7 +370,7 @@ async function scrapeGeneric(url: string, source = "manual"): Promise<ScrapedJob
     title,
     company,
     location,
-    description: description.slice(0, 8000), // cap length
+    description: description.slice(0, 8000),
     requirements: null,
     niceToHaves: null,
     skills: extractSkills(description),

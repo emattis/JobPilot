@@ -174,7 +174,7 @@ interface AnalyzeSectionProps {
 type Phase =
   | { type: "idle" }
   | { type: "loading"; message: string }
-  | { type: "complete"; result: AnalysisResult }
+  | { type: "complete"; result: AnalysisResult; aiExtracted: boolean }
   | { type: "error"; error: string; allowManual: boolean };
 
 export function AnalyzeSection({
@@ -224,7 +224,7 @@ export function AnalyzeSection({
           if (event.type === "status") {
             setPhase({ type: "loading", message: event.message });
           } else if (event.type === "complete") {
-            setPhase({ type: "complete", result: event.result });
+            setPhase({ type: "complete", result: event.result, aiExtracted: event.job?.aiExtracted ?? false });
             onAnalysisComplete();
             toast.success("Analysis complete");
           } else if (event.type === "error") {
@@ -327,7 +327,17 @@ export function AnalyzeSection({
       )}
 
       {/* Complete — inline results */}
-      {phase.type === "complete" && <InlineResults result={phase.result} />}
+      {phase.type === "complete" && (
+        <>
+          {phase.aiExtracted && (
+            <div className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-1.5 mb-3 flex items-center gap-1.5">
+              <span className="text-[10px] font-medium text-amber-400">AI-extracted</span>
+              <span className="text-[10px] text-muted-foreground">— Job data was parsed by AI. Verify details are correct.</span>
+            </div>
+          )}
+          <InlineResults result={phase.result} />
+        </>
+      )}
 
       {/* Manual paste modal */}
       {showManual && (

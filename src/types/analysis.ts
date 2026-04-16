@@ -12,6 +12,7 @@ export interface ScrapedJob {
   remote: boolean | null;
   postedAt: Date | null;
   source: string;
+  aiExtracted?: boolean;
 }
 
 /** Cached per-job role analysis — independent of any candidate */
