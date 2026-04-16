@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
 import { discoverGreenhouseJobs } from "@/lib/scrapers/greenhouse-discover";
 import { discoverLeverJobs } from "@/lib/scrapers/lever-discover";
+import { discoverGenericJobs } from "@/lib/scrapers/generic-discover";
 import { batchScoreJobs } from "@/lib/ai/score-jobs";
 import type { DiscoveredJobInput } from "@/lib/scrapers/yc";
 
@@ -19,15 +20,19 @@ function sse(event: Record<string, unknown>): string {
 async function scanCompany(
   slug: string,
   atsType: string,
-  targetRoles: string[]
+  targetRoles: string[],
+  careerUrl?: string,
+  companyName?: string
 ): Promise<DiscoveredJobInput[]> {
   const jobs: DiscoveredJobInput[] = [];
   if (atsType === "greenhouse") {
     jobs.push(...(await discoverGreenhouseJobs(slug, targetRoles)));
   } else if (atsType === "lever") {
     jobs.push(...(await discoverLeverJobs(slug, targetRoles)));
+  } else if (careerUrl && companyName) {
+    // Generic: use AI to extract job listings from any career page
+    jobs.push(...(await discoverGenericJobs(careerUrl, companyName, targetRoles)));
   }
-  // ashby/workday/custom: not yet implemented, return empty
   return jobs;
 }
 
@@ -93,7 +98,7 @@ export async function POST(request: NextRequest) {
           }
 
           send({ type: "status", message: `Scanning ${source.name}...` });
-          const found = await scanCompany(source.slug, source.atsType, profile.targetRoles);
+          const found = await scanCompany(source.slug, source.atsType, profile.targetRoles, source.careerUrl, source.name);
           newJobs = found.filter((j) => !existingUrls.has(j.url));
 
           send({ type: "status", message: `Found ${found.length} jobs, ${newJobs.length} new` });
@@ -133,7 +138,7 @@ export async function POST(request: NextRequest) {
           let totalFound = 0;
           for (const company of companies) {
             send({ type: "status", message: `Scanning ${company.name}...` });
-            const found = await scanCompany(company.slug, company.atsType, profile.targetRoles);
+            const found = await scanCompany(company.slug, company.atsType, profile.targetRoles, company.careerUrl, company.name);
             const fresh = found.filter((j) => !existingUrls.has(j.url));
             newJobs.push(...fresh);
             for (const j of found) existingUrls.add(j.url);

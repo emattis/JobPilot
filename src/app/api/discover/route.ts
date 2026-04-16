@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
 import { discoverGreenhouseJobs } from "@/lib/scrapers/greenhouse-discover";
 import { discoverLeverJobs } from "@/lib/scrapers/lever-discover";
+import { discoverGenericJobs } from "@/lib/scrapers/generic-discover";
 import { batchScoreJobs } from "@/lib/ai/score-jobs";
 import type { DiscoveredJobInput } from "@/lib/scrapers/yc";
 
@@ -159,15 +160,16 @@ export async function POST() {
         // ── Load sources from CompanyWatchlist ─────────────────────────────
         const watchlistSources = await prisma.companyWatchlist.findMany({
           where: { userId: profileId, active: true },
-          select: { id: true, name: true, slug: true, atsType: true },
+          select: { id: true, name: true, slug: true, atsType: true, careerUrl: true },
         });
 
         // Build a combined list: profile target companies (scan both GH + Lever)
-        // plus watchlist sources (scan by their specific ATS type)
+        // plus watchlist sources (scan by their specific ATS type or AI for custom)
         interface ScanTarget {
           name: string;
           slug: string;
-          atsType: "greenhouse" | "lever" | "both";
+          atsType: "greenhouse" | "lever" | "both" | "custom";
+          careerUrl?: string;
           watchlistId?: string;
         }
 
@@ -176,8 +178,12 @@ export async function POST() {
 
         // Add watchlist sources first (they have explicit ATS types)
         for (const src of watchlistSources) {
-          const ats = src.atsType === "greenhouse" || src.atsType === "lever" ? src.atsType : "both";
-          scanTargets.push({ name: src.name, slug: src.slug, atsType: ats, watchlistId: src.id });
+          const ats = src.atsType === "greenhouse" || src.atsType === "lever"
+            ? src.atsType
+            : (src.atsType === "ashby" || src.atsType === "workday" || src.atsType === "custom")
+            ? "custom" as const
+            : "both" as const;
+          scanTargets.push({ name: src.name, slug: src.slug, atsType: ats, careerUrl: src.careerUrl, watchlistId: src.id });
           seenSlugs.add(src.slug.toLowerCase());
         }
 
@@ -207,6 +213,9 @@ export async function POST() {
             }
             if (target.atsType === "lever" || target.atsType === "both") {
               jobs.push(...(await discoverLeverJobs(target.slug, profile.targetRoles)));
+            }
+            if (target.atsType === "custom" && target.careerUrl) {
+              jobs.push(...(await discoverGenericJobs(target.careerUrl, target.name, profile.targetRoles)));
             }
 
             for (const job of jobs) {
